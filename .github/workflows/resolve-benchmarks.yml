@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   resolve:
@@ -34,6 +34,18 @@ jobs:
           assert all(len(x['sha256'])==64 and len(x['source_sha256'])==64 for x in d['instances'])
           print('PASS: resolved 30 unique SHA-256-pinned instances (15 SAT / 15 UNSAT)')
           PY
+      - name: Commit exact resolved manifest
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmarks/competition_manifest.json
+          if git diff --cached --quiet; then
+            echo 'Manifest already committed; no repository update required.'
+          else
+            git commit -m 'bench: pin resolved SAT Competition manifest'
+            git push origin HEAD:r7/zero-to-hero
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: resolved-competition-manifest
