@@ -56,9 +56,9 @@ jobs:
           rc3=$?
           set -e
           test "$rc1" -eq 20 && test "$rc2" -eq 20 && test "$rc3" -eq 20
-          /tmp/drat-trim-bin tests/cnf/unsat_basic.cnf unsat_basic.drat
-          /tmp/drat-trim-bin tests/cnf/unsat_units.cnf unsat_units.drat
-          /tmp/drat-trim-bin tests/cnf/empty_clause.cnf empty_clause.drat
+          bash tools/verify_drat.sh /tmp/drat-trim-bin tests/cnf/unsat_basic.cnf unsat_basic.drat
+          bash tools/verify_drat.sh /tmp/drat-trim-bin tests/cnf/unsat_units.cnf unsat_units.drat
+          bash tools/verify_drat.sh /tmp/drat-trim-bin tests/cnf/empty_clause.cnf empty_clause.drat
       - name: Certified benchmark harness smoke
         run: |
           python3 tools/benchmark.py \
@@ -115,8 +115,8 @@ jobs:
           git clone https://github.com/niklasso/minisat.git /tmp/minisat
           git -C /tmp/minisat checkout eb01ad68b75bb3b34ff8657c37ad6a31faae0fc3
           export MROOT=/tmp/minisat
-          make -C /tmp/minisat/simp -j2 rs
-          cp /tmp/minisat/simp/minisat_static /tmp/minisat-bin
+          make -C /tmp/minisat/simp -j2 r CXX="g++ -fpermissive"
+          cp /tmp/minisat/simp/minisat_release /tmp/minisat-bin
       - name: Build pinned Kissat 4.0.2
         shell: bash
         run: |

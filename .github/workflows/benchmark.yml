@@ -31,8 +31,8 @@ jobs:
           git clone https://github.com/niklasso/minisat.git /tmp/minisat
           git -C /tmp/minisat checkout eb01ad68b75bb3b34ff8657c37ad6a31faae0fc3
           export MROOT=/tmp/minisat
-          make -C /tmp/minisat/simp -j2 rs
-          cp /tmp/minisat/simp/minisat_static /tmp/minisat-bin
+          make -C /tmp/minisat/simp -j2 r CXX="g++ -fpermissive"
+          cp /tmp/minisat/simp/minisat_release /tmp/minisat-bin
       - name: Build Kissat
         run: |
           git clone https://github.com/arminbiere/kissat.git /tmp/kissat

@@ -73,7 +73,8 @@ def verify_unsat(drat_trim, cnf, proof, timeout):
         return False, {'command':[str(drat_trim),str(cnf),str(proof)],'exit_code':None,'stdout':'','stderr':'missing proof'}
     try:
         p=subprocess.run([str(drat_trim),str(cnf),str(proof)],capture_output=True,text=True,timeout=timeout)
-        return p.returncode==0, {'command':[str(drat_trim),str(cnf),str(proof)],'exit_code':p.returncode,'stdout':p.stdout,'stderr':p.stderr}
+        verdict = any(line.strip() == 's VERIFIED' for line in p.stdout.splitlines())
+        return verdict, {'command':[str(drat_trim),str(cnf),str(proof)],'exit_code':p.returncode,'stdout':p.stdout,'stderr':p.stderr,'verified_verdict':verdict}
     except subprocess.TimeoutExpired as e:
         stdout=e.stdout.decode(errors='replace') if isinstance(e.stdout,bytes) else (e.stdout or '')
         stderr=e.stderr.decode(errors='replace') if isinstance(e.stderr,bytes) else (e.stderr or '')

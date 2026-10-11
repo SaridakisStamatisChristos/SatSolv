@@ -34,3 +34,21 @@
 - Earliest invalidated phase: INTEGRATE for benchmark evidence retention.
 - Repair: retain command, exit code, complete stdout/stderr, timing, timeout/crash state, independent verification transcript, proof size, tool versions, repository commit, and manifest hash in raw JSON; add `report_benchmark.py` to derive the required Markdown table.
 - Reverification: local smoke harness solved and independently verified all 5 committed smoke cases, retained both output streams for every SatSolv row, and generated the Markdown table from JSON. CI reruns the smoke harness with upstream drat-trim.
+
+## F-005 — Verified DRAT proof misclassified by exit-code assumption
+
+- Reproducer: GitHub Actions run `38177405010` on head `7a7a847e125a8b244f4fcb8847f1c8301370d2fb`.
+- Symptom: all three external `drat-trim` checks printed `s VERIFIED`, but the CI step failed after the trivial empty-clause case because that checker invocation returned exit code 1.
+- Root cause: the integration treated process exit code 0 as the sole acceptance signal instead of consuming the checker's explicit verification verdict.
+- Earliest invalidated phase: INTEGRATE/VERIFY evidence interpretation, not proof generation.
+- Repair: require an exact `s VERIFIED` line; retain the raw checker exit code/stdout/stderr in evidence. The wrapper rejects missing/other verdicts regardless of return code.
+- Local revalidation: a mock checker emitting `s VERIFIED` with exit 1 is accepted, and the 5-case certified smoke harness reports 5/5 solved with zero verification failures. External CI revalidation remains required.
+
+## F-006 — MiniSat 2.2.0 rejects modern GCC friend-declaration diagnostics
+
+- Reproducer: GitHub Actions run `38177405010`, Ubuntu 24.04 / GCC 13.3, exact MiniSat commit `eb01ad68b75bb3b34ff8657c37ad6a31faae0fc3`.
+- Symptom: the upstream 2.2.0 source fails with `friend declaration ... specifies default arguments` errors before differential testing.
+- Root cause: legacy C++ accepted by MiniSat's era is diagnosed as an error by modern GCC unless permissive compatibility mode is enabled.
+- Earliest invalidated phase: INTEGRATE/PACKAGE baseline portability, not solver logic.
+- Repair: keep the exact upstream source untouched and build its optimized `r` target with `CXX="g++ -fpermissive"`; use `minisat_release` as the baseline binary.
+- Reverification: requires the next GitHub Actions differential lane.
