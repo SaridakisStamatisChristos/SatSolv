@@ -5,6 +5,7 @@ on:
     branches: ['r7/**']
     paths:
       - benchmarks/competition_manifest.json
+      - .github/workflows/benchmark.yml
   workflow_dispatch:
     inputs:
       time_limit:
