@@ -1,5 +1,5 @@
-b699d01998651273fdf729bd64790af21a205f3957f37328c9e987eba6b93c14  ./.github/workflows/benchmark.yml
-b28ffb49f6657fc5f1b9c5cd3b452065f265e44ff917963ba37f8502b78ee4af  ./.github/workflows/ci.yml
+93bd34ecdd60d9c334479aa05cdd20dd5d2888bb54f3aedf80d1cbc7fc0dabbe  ./.github/workflows/benchmark.yml
+9a0b73a090662f34720795db085c852048b6b272de9001285dca9abff7885c3c  ./.github/workflows/ci.yml
 a69b12b3c97c63083943dc6348ea08e4b469fce2125c42f4fdf8019c5acfe274  ./.gitignore
 1add44faf4e52f5737f3a7cc5fbc5759607410517c9b7df634bb7b5622e4f4f1  ./CMakeLists.txt
 6d07e220d644e494018438df6c3c48000b92dd1303c864ce54b4e655bd694559  ./README.md
@@ -12,7 +12,7 @@ dbae20673b41d7cf7b819470e3c9b655553a969756b5af09707fd4e5a1031dfb  ./docs/correct
 b3d9f16abeb5b7dc7f1367ac940d63d344511abf492746d15009b6d6a5f3ae86  ./docs/proof-system.md
 df1337abda8ebde0d5fb1b1fa553a9871cee378d1c76c7c1aae2a382f3c4ba2c  ./docs/r7-assumptions.md
 0e2a0488e2a20ccddf483290f082b2ecf576cd4d2914a2f34533b324194b27fc  ./docs/r7-contract.md
-33c4b93ac438ac4914e13afa64e51d869588642af0e6263b6b57e648a589a721  ./evidence/failure-repair-ledger.md
+85e47f7c1e1f3eebcf70e27db539c3ecfd09da2b2361dcbe426c5d211acce999  ./evidence/failure-repair-ledger.md
 89e9034d3dfddf93e2c75a8a1ddf9435f55f0ee2adb58a7eeb0a44e59f1dcab6  ./evidence/local-verification.md
 a5a98b5f02ac7d16106dc441b62b493397da0840b90802e1ab8661ade8951f55  ./include/satsolv/parser.hpp
 6bba455dafa24a18986c238329c6e23fc0052521cc8a542dc0e20cc6a0cb6989  ./include/satsolv/solver.hpp
