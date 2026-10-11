@@ -1,6 +1,10 @@
 name: Acceptance Benchmark
 
 on:
+  push:
+    branches: ['r7/**']
+    paths:
+      - benchmarks/competition_manifest.json
   workflow_dispatch:
     inputs:
       time_limit:
@@ -15,6 +19,8 @@ jobs:
   benchmark:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    env:
+      SATSOLV_BENCH_TIME_LIMIT: ${{ inputs.time_limit || '60' }}
     steps:
       - uses: actions/checkout@v4
       - name: Require resolved competition manifest
@@ -50,15 +56,17 @@ jobs:
             --minisat /tmp/minisat-bin \
             --kissat /tmp/kissat-bin \
             --drat-trim /tmp/drat-trim-bin \
-            --time-limit '${{ inputs.time_limit }}' \
+            --time-limit "$SATSOLV_BENCH_TIME_LIMIT" \
             --memory-gib 4 \
             --output benchmarks/results/acceptance.json
       - name: Generate comparison table
         run: python3 tools/report_benchmark.py benchmarks/results/acceptance.json benchmarks/results/acceptance.md
       - name: Upload raw results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: satsolv-acceptance-results
           path: |
             benchmarks/results/acceptance.json
             benchmarks/results/acceptance.md
+          if-no-files-found: warn
