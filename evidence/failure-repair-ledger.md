@@ -16,3 +16,12 @@
 - Earliest invalidated phase: SPEC/GENERATE for clause minimization semantics.
 - Repair: apply sequential resolution semantics by erasing each removed literal from the live justification set before considering subsequent removals.
 - Reverification: 756 exhaustive/random formulas passed; pigeonhole 8/7 produced 4,121 RUP additions accepted by the independent development oracle, with 20 restarts and 2,497 learnt-clause deletions exercised.
+
+## F-003 — Pinned MiniSat CI build recipe used a non-existent target
+
+- Reproducer: GitHub Actions run on Ubuntu 24.04 at pushed revision `797d7929d8217d79597a7cb5fe6e2b00aafaa76c`.
+- Symptom: differential job stopped at `make -C /tmp/minisat -j2 r` with `No rule to make target 'r'`.
+- Root cause: the pinned MiniSat 2.2.0 repository expects `MROOT` plus the `simp/` makefile target `rs`; the initial CI recipe assumed a newer top-level build convention.
+- Earliest invalidated phase: INTEGRATE/PACKAGE (external baseline build recipe), not solver logic.
+- Repair: export `MROOT=/tmp/minisat`, run `make -C /tmp/minisat/simp -j2 rs`, and copy `simp/minisat_static`.
+- Reverification: requires the repaired GitHub Actions differential lane to complete successfully.
