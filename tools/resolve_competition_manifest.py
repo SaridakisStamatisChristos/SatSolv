@@ -38,6 +38,15 @@ def basename(url: str) -> str:
     return urllib.parse.unquote(Path(urllib.parse.urlparse(url).path).name)
 
 
+def identity_from_url(url: str) -> str:
+    name = basename(url)
+    lower = name.lower()
+    for suffix in (".cnf.xz", ".cnf", ".xz"):
+        if lower.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--candidates", type=Path, required=True)
@@ -54,20 +63,27 @@ def main() -> int:
 
     body = fetch_bytes(URI_LIST).decode("utf-8")
     urls = [line.strip() for line in body.splitlines() if line.strip()]
-    by_name = {}
+    by_identity: dict[str, list[str]] = {}
     for url in urls:
-        by_name.setdefault(basename(url), []).append(url)
+        raw = basename(url)
+        for key in {raw, identity_from_url(url)}:
+            by_identity.setdefault(key, []).append(url)
 
     args.work.mkdir(parents=True, exist_ok=True)
     resolved = []
     for index, c in enumerate(candidates, 1):
         filename = c["filename"]
-        matches = by_name.get(filename, [])
+        gbd_hash = c["gbd_hash"]
+        matches = list(dict.fromkeys(by_identity.get(gbd_hash, []) + by_identity.get(filename, [])))
         if len(matches) != 1:
-            raise SystemExit(f"{filename}: expected exactly one official URL, found {len(matches)}")
+            sample = ", ".join(basename(u) for u in urls[:8])
+            raise SystemExit(
+                f"{filename} / {gbd_hash}: expected exactly one official URL, found {len(matches)}; "
+                f"URI-list sample basenames: {sample}"
+            )
         url = matches[0]
         compressed = args.work / filename
-        print(f"[{index:02d}/{len(candidates)}] {filename}", flush=True)
+        print(f"[{index:02d}/{len(candidates)}] {filename} <= {url}", flush=True)
         req = urllib.request.Request(url, headers={"User-Agent": UA})
         with urllib.request.urlopen(req, timeout=300) as src, compressed.open("wb") as dst:
             shutil.copyfileobj(src, dst, length=1 << 20)
@@ -88,7 +104,7 @@ def main() -> int:
             "expected": c["expected"],
             "family": c["family"],
             "minisat1m": c["minisat1m"],
-            "gbd_hash": c["gbd_hash"],
+            "gbd_hash": gbd_hash,
             "url": url,
             "source_filename": filename,
             "source_sha256": source_hash,
