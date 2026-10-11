@@ -1,0 +1,59 @@
+name: Acceptance Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      time_limit:
+        description: Per-solver per-instance wall-clock seconds
+        required: true
+        default: '60'
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require resolved competition manifest
+        run: test -f benchmarks/competition_manifest.json || { echo 'competition_manifest.json is not resolved yet'; exit 2; }
+      - name: Build SatSolv
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2
+      - name: Build drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Build MiniSat
+        run: |
+          git clone https://github.com/niklasso/minisat.git /tmp/minisat
+          git -C /tmp/minisat checkout eb01ad68b75bb3b34ff8657c37ad6a31faae0fc3
+          make -C /tmp/minisat -j2 r
+          cp /tmp/minisat/build/release/bin/minisat /tmp/minisat-bin
+      - name: Build Kissat
+        run: |
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout f7e57764c19cf35198830575492dc9d80e872b55
+          cd /tmp/kissat && ./configure && make -j2
+          cp build/kissat /tmp/kissat-bin
+      - name: Fetch and hash-check benchmark inputs
+        run: python3 tools/fetch_benchmarks.py --manifest benchmarks/competition_manifest.json --dest benchmarks/cache
+      - name: Execute certified comparison
+        run: |
+          python3 tools/benchmark.py \
+            --manifest benchmarks/competition_manifest.json \
+            --root benchmarks/cache \
+            --satsolv build/satsolv \
+            --minisat /tmp/minisat-bin \
+            --kissat /tmp/kissat-bin \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit '${{ inputs.time_limit }}' \
+            --memory-gib 4 \
+            --output benchmarks/results/acceptance.json
+      - name: Upload raw results
+        uses: actions/upload-artifact@v4
+        with:
+          name: satsolv-acceptance-results
+          path: benchmarks/results/acceptance.json
