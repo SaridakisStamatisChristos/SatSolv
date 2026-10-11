@@ -10,7 +10,8 @@ rc=$?
 set -e
 printf '%s\n' "$output"
 printf 'c drat-trim exit code: %s\n' "$rc" >&2
-if grep -Fxq 's VERIFIED' <<<"$output"; then
+normalized=$(printf '%s\n' "$output" | tr -d '\r')
+if grep -Fxq 's VERIFIED' <<<"$normalized"; then
   exit 0
 fi
 exit 1
