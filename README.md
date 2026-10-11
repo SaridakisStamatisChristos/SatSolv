@@ -42,7 +42,7 @@ Build upstream `drat-trim` at the pinned commit documented in `docs/proof-system
 
 ```bash
 ./build/satsolv tests/cnf/unsat_basic.cnf --proof proof.drat || test $? -eq 20
-tools/verify_drat.sh /path/to/drat-trim tests/cnf/unsat_basic.cnf proof.drat
+bash tools/verify_drat.sh /path/to/drat-trim tests/cnf/unsat_basic.cnf proof.drat
 ```
 
 CI performs this with the external checker; `tools/check_rup.py` is only an additional development oracle.
