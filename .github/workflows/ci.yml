@@ -27,6 +27,8 @@ jobs:
         run: python3 tools/metamorphic_check.py build/satsolv --cases 300
       - name: Malformed DIMACS adversarial cases
         run: python3 tools/parser_adversarial.py build/satsolv
+      - name: Python tool syntax
+        run: python3 -m py_compile tools/*.py
       - name: SAT witness independent validation
         shell: bash
         run: |
@@ -57,6 +59,17 @@ jobs:
           /tmp/drat-trim-bin tests/cnf/unsat_basic.cnf unsat_basic.drat
           /tmp/drat-trim-bin tests/cnf/unsat_units.cnf unsat_units.drat
           /tmp/drat-trim-bin tests/cnf/empty_clause.cnf empty_clause.drat
+      - name: Certified benchmark harness smoke
+        run: |
+          python3 tools/benchmark.py \
+            --manifest benchmarks/smoke_manifest.json \
+            --root . \
+            --satsolv build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 5 \
+            --memory-gib 4 \
+            --output benchmarks/results/ci-smoke.json
+          python3 tools/report_benchmark.py benchmarks/results/ci-smoke.json benchmarks/results/ci-smoke.md
       - name: Preserve certification logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,6 +78,8 @@ jobs:
           path: |
             *.drat
             sat.out
+            benchmarks/results/ci-smoke.json
+            benchmarks/results/ci-smoke.md
           if-no-files-found: ignore
 
   sanitizers:

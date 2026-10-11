@@ -76,9 +76,10 @@ python3 tools/benchmark.py \
   --drat-trim /path/to/drat-trim \
   --time-limit 10 \
   --output benchmarks/results/smoke.json
+python3 tools/report_benchmark.py benchmarks/results/smoke.json benchmarks/results/smoke.md
 ```
 
-For acceptance, add the pinned MiniSat and Kissat binaries and use a resolved SAT Competition manifest. See `docs/benchmarking.md`.
+Raw JSON retains solver commands/stdout/stderr and verification transcripts; the Markdown table is generated from that evidence. For acceptance, add the pinned MiniSat and Kissat binaries and use a resolved SAT Competition manifest. See `docs/benchmarking.md`.
 
 ## Design documents
 

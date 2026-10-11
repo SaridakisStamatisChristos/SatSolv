@@ -25,3 +25,12 @@
 - Earliest invalidated phase: INTEGRATE/PACKAGE (external baseline build recipe), not solver logic.
 - Repair: export `MROOT=/tmp/minisat`, run `make -C /tmp/minisat/simp -j2 rs`, and copy `simp/minisat_static`.
 - Reverification: requires the repaired GitHub Actions differential lane to complete successfully.
+
+## F-004 — Benchmark JSON dropped raw solver streams
+
+- Reproducer: R7 integration audit against the benchmark-integrity contract.
+- Symptom: the initial harness measured stdout/stderr but omitted them when serializing per-solver rows.
+- Root cause: summary-oriented result projection discarded fields returned by the process runner.
+- Earliest invalidated phase: INTEGRATE for benchmark evidence retention.
+- Repair: retain command, exit code, complete stdout/stderr, timing, timeout/crash state, independent verification transcript, proof size, tool versions, repository commit, and manifest hash in raw JSON; add `report_benchmark.py` to derive the required Markdown table.
+- Reverification: local smoke harness solved and independently verified all 5 committed smoke cases, retained both output streams for every SatSolv row, and generated the Markdown table from JSON. CI reruns the smoke harness with upstream drat-trim.
