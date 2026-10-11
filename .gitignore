@@ -1,0 +1,7 @@
+/build*/
+*.drat
+*.out
+*.log
+__pycache__/
+.pytest_cache/
+benchmarks/cache/
