@@ -2,8 +2,12 @@ name: Memory Probe Matrix
 
 on:
   push:
-    branches: ['r7/perf-memory-reclaim']
+    branches: ['r7/perf-heap-init']
     paths:
+      - src/**
+      - include/**
+      - benchmarks/memory_regression_manifest.json
+      - tools/benchmark.py
       - .github/workflows/memory-probe.yml
   workflow_dispatch:
 
