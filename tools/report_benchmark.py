@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the required human-readable benchmark table from raw benchmark JSON."""
+"""Generate a human-readable benchmark report from raw benchmark JSON evidence."""
 from __future__ import annotations
 import argparse, json
 from pathlib import Path
@@ -18,7 +18,38 @@ def cell(v, certified=False):
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('input',type=Path); ap.add_argument('output',type=Path); a=ap.parse_args()
     data=json.loads(a.input.read_text()); lines=[]
-    lines += ['# SatSolv benchmark report','',f"Raw evidence: `{a.input}`",'']
+    certification=data.get('certification')
+    if certification is None:
+        certification_label='UNAVAILABLE (legacy evidence schema)'
+    else:
+        certification_label='PASS' if certification.get('passed') is True else 'FAIL'
+
+    env=data.get('environment',{})
+    lines += [
+        '# SatSolv benchmark report','',
+        f"**Certification: {certification_label}**",'',
+        f"Raw evidence: `{a.input}`",
+        f"Repository commit: `{env.get('repository_commit','UNAVAILABLE')}`",
+        f"Manifest SHA-256: `{data.get('manifest_sha256','UNAVAILABLE')}`",
+        f"Solver wall-clock limit: `{env.get('time_limit_seconds','UNAVAILABLE')} s`",
+        f"Proof-verification wall-clock limit: `{env.get('verification_time_limit_seconds','UNAVAILABLE')} s`",
+        f"Memory limit: `{env.get('memory_gib','UNAVAILABLE')} GiB`",''
+    ]
+
+    if certification is not None and not certification.get('passed'):
+        violations=certification.get('violations',[])
+        lines += ['## Certification violations','']
+        if violations:
+            lines += ['| Instance | Solver | Kind | Expected | Result |','|---|---|---|---|---|']
+            for v in violations:
+                lines.append(
+                    f"| {v.get('instance','—')} | {v.get('solver','—')} | {v.get('kind','—')} | "
+                    f"{v.get('expected','—')} | {v.get('result','—')} |"
+                )
+        else:
+            lines.append('Certification failed without a structured violation record.')
+        lines.append('')
+
     lines += ['| Instance | Expected | SatSolv | SatSolv Verified | MiniSat | Kissat |','|---|---|---:|---|---:|---:|']
     for row in data.get('rows',[]):
         ss=row.get('solvers',{}).get('satsolv'); ms=row.get('solvers',{}).get('minisat'); ks=row.get('solvers',{}).get('kissat')
