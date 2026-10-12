@@ -367,7 +367,9 @@ void Solver::reduce_database() {
     });
     const std::size_t remove_count = candidates.size() / 2;
     for (std::size_t i = 0; i < remove_count; ++i) {
-        clauses_[static_cast<std::size_t>(candidates[i])].deleted = true;
+        Clause& c = clauses_[static_cast<std::size_t>(candidates[i])];
+        c.deleted = true;
+        std::vector<int>().swap(c.lits);
         ++stats_.deleted_learnt_clauses;
     }
 }
