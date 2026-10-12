@@ -58,10 +58,12 @@ jobs:
             --kissat /tmp/kissat-bin \
             --drat-trim /tmp/drat-trim-bin \
             --time-limit "$SATSOLV_BENCH_TIME_LIMIT" \
+            --verification-time-limit 300 \
             --memory-gib 4 \
             --output benchmarks/results/acceptance.json
       - name: Generate comparison table
-        run: python3 tools/report_benchmark.py benchmarks/results/acceptance.json benchmarks/results/acceptance.md
+        if: always()
+        run: test ! -f benchmarks/results/acceptance.json || python3 tools/report_benchmark.py benchmarks/results/acceptance.json benchmarks/results/acceptance.md
       - name: Upload raw results
         if: always()
         uses: actions/upload-artifact@v4
@@ -72,4 +74,4 @@ jobs:
             benchmarks/results/acceptance.md
           if-no-files-found: warn
 
-# Semantics-neutral R7 evidence trigger: force a fresh certified acceptance run.
+# R7 acceptance run: solver budget and independent proof-verification budget are explicit and fail closed.
