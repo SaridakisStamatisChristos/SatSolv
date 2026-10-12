@@ -1,0 +1,77 @@
+name: Binary DRAT A/B
+
+on:
+  push:
+    branches: ['r7/perf-binary-drat-ab']
+    paths: ['.github/workflows/binary-drat-ab.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select proof-heavy diagnostic corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'clqcolor-08-06-07.shuffled-as.sat05-1257.cnf','rbsat-v760c43649gyes10.cnf','vmpc_28.shuffled-as.sat05-1957.cnf','or_randxor_k3_n520_m520.cnf','mchess16-mixed-35percent-blocked.cnf','posixpath__joinrealpath_13.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text()); rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=6: raise SystemExit('proof corpus incomplete')
+          Path('/tmp/proof.json').write_text(json.dumps({'count':6,'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/proof.json --dest benchmarks/cache
+      - name: Build text and binary proof variants
+        run: |
+          git worktree add --detach /tmp/text "$GITHUB_SHA"
+          git worktree add --detach /tmp/binary "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/binary/src/solver.cpp'); s=p.read_text()
+          old='''void Solver::log_clause(const std::vector<int>& clause) {\n    if (!proof_enabled_) return;\n    const std::streampos before = proof_.tellp();\n    for (int lit : clause) proof_ << lit << ' ';\n    proof_ << "0\\n";\n    const std::streampos after = proof_.tellp();\n    if (before >= 0 && after >= before) stats_.proof_bytes += static_cast<std::uint64_t>(after - before);\n}\n\nvoid Solver::log_empty() {\n    if (!proof_enabled_) return;\n    const std::streampos before = proof_.tellp();\n    proof_ << "0\\n";\n    const std::streampos after = proof_.tellp();\n    if (before >= 0 && after >= before) stats_.proof_bytes += static_cast<std::uint64_t>(after - before);\n}'''
+          new='''void Solver::log_clause(const std::vector<int>& clause) {\n    if (!proof_enabled_) return;\n    proof_.put('a');\n    ++stats_.proof_bytes;\n    for (int lit : clause) {\n        std::uint64_t code = lit > 0\n            ? 2ULL * static_cast<std::uint64_t>(lit)\n            : 2ULL * static_cast<std::uint64_t>(-static_cast<std::int64_t>(lit)) + 1ULL;\n        do {\n            unsigned char byte = static_cast<unsigned char>(code & 0x7fU);\n            code >>= 7U;\n            if (code != 0U) byte = static_cast<unsigned char>(byte | 0x80U);\n            proof_.put(static_cast<char>(byte));\n            ++stats_.proof_bytes;\n        } while (code != 0U);\n    }\n    proof_.put('\\0');\n    ++stats_.proof_bytes;\n}\n\nvoid Solver::log_empty() {\n    if (!proof_enabled_) return;\n    proof_.put('a');\n    proof_.put('\\0');\n    stats_.proof_bytes += 2;\n}'''
+          if old not in s: raise SystemExit('proof logging anchor missing')
+          p.write_text(s.replace(old,new,1))
+          PY
+          for d in /tmp/text /tmp/binary; do
+            cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$d/build" -j2
+            ctest --test-dir "$d/build" --output-on-failure
+          done
+      - name: Run certified proof A/B
+        run: |
+          mkdir -p benchmarks/results/binary-drat-ab
+          for mode in text binary; do
+            python3 tools/benchmark.py --manifest /tmp/proof.json --root benchmarks/cache --satsolv "/tmp/${mode}/build/satsolv" --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 180 --memory-gib 4 --output "benchmarks/results/binary-drat-ab/${mode}.json"
+          done
+      - name: Compare
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          ds={m:json.loads(Path(f'benchmarks/results/binary-drat-ab/{m}.json').read_text()) for m in ('text','binary')}
+          for m,d in ds.items():
+            if not d['certification']['passed']: raise SystemExit(f'{m} certification failed: {d["certification"]["violations"]}')
+            conf=sum(int(r['solvers']['satsolv'].get('stats',{}).get('conflicts',0)) for r in d['rows']); sec=sum(float(r['solvers']['satsolv'].get('stats',{}).get('solve_seconds',r['solvers']['satsolv']['elapsed'])) for r in d['rows']); proof=sum(int(r['solvers']['satsolv'].get('proof_bytes',0)) for r in d['rows']); print(m,d['summary']['satsolv'],'conflicts_s',conf/max(sec,1e-9),'proof_bytes',proof)
+          bm={r['instance']:r['solvers']['satsolv'] for r in ds['text']['rows']}; cm={r['instance']:r['solvers']['satsolv'] for r in ds['binary']['rows']}
+          for n in sorted(bm): print(n,'text',bm[n]['result'],round(bm[n]['elapsed'],3),bm[n].get('proof_bytes'),'binary',cm[n]['result'],round(cm[n]['elapsed'],3),cm[n].get('proof_bytes'))
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-drat-ab-evidence
+          path: benchmarks/results/binary-drat-ab/*.json
+          if-no-files-found: error
