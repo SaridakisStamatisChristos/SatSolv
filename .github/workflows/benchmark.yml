@@ -2,7 +2,7 @@ name: Acceptance Benchmark
 
 on:
   push:
-    branches: ['r7/**']
+    branches: ['r7/**', 'fit/**']
     paths:
       - benchmarks/competition_manifest.json
       - src/**
@@ -79,4 +79,4 @@ jobs:
             benchmarks/results/acceptance.md
           if-no-files-found: warn
 
-# R7 acceptance run: solver budget and independent proof-verification budget are explicit and fail closed.
+# R7/Core-v2 acceptance run: solver budget and independent proof-verification budget are explicit and fail closed.
