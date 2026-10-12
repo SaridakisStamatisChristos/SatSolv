@@ -1,7 +1,7 @@
 # Clause DB v2.1 execution record
 
-Status: implemented; remote qualification and focused certification pending.
-No performance acceptance or superiority is claimed.
+Status: **REJECTED for adoption** after complete, independently inspected frozen
+30-instance acceptance. Core v2 remains the accepted control. Do not merge PR #4.
 
 ## Local evidence before submission
 
@@ -27,5 +27,6 @@ Rejected Search Control v2 is not changed or combined.
 Benchmark harness, competition manifest and inputs are unchanged.
 
 The predeclared execution contract and metric limitations are documented in
-`docs/clause-database-v21.md`. Append actual run/artifact evidence and the decision
-after raw artifact inspection. A successful upload/run launch is not acceptance.
+`docs/clause-database-v21.md`. Focused evidence is recorded in
+`evidence/clause-db-v21-focused.md`; authoritative full results and the next
+bounded hypothesis are in `evidence/clause-db-v21-acceptance.md`.
