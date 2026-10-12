@@ -24,7 +24,7 @@
 - Root cause: the pinned MiniSat 2.2.0 repository expects `MROOT` plus the `simp/` makefile target; the initial CI recipe assumed a newer top-level build convention.
 - Earliest invalidated phase: INTEGRATE/PACKAGE (external baseline build recipe), not solver logic.
 - Repair: export `MROOT=/tmp/minisat`, build from `/tmp/minisat/simp`, and use the optimized release binary.
-- Reverification: latest-head CI run `38205848811` completed the pinned MiniSat/Kissat differential lane successfully.
+- Reverification: CI run `38205848811` completed the pinned MiniSat/Kissat differential lane successfully.
 
 ## F-004 — Benchmark JSON dropped raw solver streams
 
@@ -33,7 +33,7 @@
 - Root cause: summary-oriented result projection discarded fields returned by the process runner.
 - Earliest invalidated phase: INTEGRATE for benchmark evidence retention.
 - Repair: retain command, exit code, complete stdout/stderr, timing, timeout/crash state, independent verification transcript, proof size, tool versions, repository commit, and manifest hash in raw JSON; add `report_benchmark.py` to derive the required Markdown table.
-- Reverification: local smoke harness solved and independently verified all committed smoke cases. Latest-head CI run `38205848811` reran the certified smoke harness successfully.
+- Reverification: local smoke harness solved and independently verified all committed smoke cases. CI run `38205848811` reran the certified smoke harness successfully.
 
 ## F-005 — Verified DRAT proof misclassified by exit-code assumption
 
@@ -42,7 +42,7 @@
 - Root cause: the integration treated process exit code 0 as the sole acceptance signal instead of consuming the checker's explicit verification verdict.
 - Earliest invalidated phase: INTEGRATE/VERIFY evidence interpretation, not proof generation.
 - Repair: require an exact `s VERIFIED` line; retain the raw checker exit code/stdout/stderr in evidence. The wrapper rejects missing/other verdicts regardless of return code.
-- Reverification: latest-head CI run `38205848811` completed all three upstream `drat-trim` smoke certifications successfully.
+- Reverification: CI run `38205848811` completed all three upstream `drat-trim` smoke certifications successfully.
 
 ## F-006 — MiniSat 2.2.0 rejects modern GCC friend-declaration diagnostics
 
@@ -51,7 +51,7 @@
 - Root cause: legacy C++ accepted by MiniSat's era is diagnosed as an error by modern GCC unless permissive compatibility mode is enabled.
 - Earliest invalidated phase: INTEGRATE/PACKAGE baseline portability, not solver logic.
 - Repair: keep the exact upstream source untouched and build its optimized release target with `CXX="g++ -fpermissive"`; use `minisat_release` as the baseline binary.
-- Reverification: latest-head CI run `38205848811` built the pinned MiniSat commit and completed the 200-case differential campaign successfully.
+- Reverification: CI run `38205848811` built the pinned MiniSat commit and completed the 200-case differential campaign successfully.
 
 ## F-007 — Full acceptance workflow was false-green on rejected certification
 
@@ -60,14 +60,39 @@
 - Root cause: `tools/benchmark.py` recorded verification failures in JSON/summary metrics but never converted a certification violation into a failing process exit status. The workflow therefore treated evidence generation as acceptance.
 - Earliest invalidated phase: VERIFY. The solver result remained uncertified; Gate F could not be considered passed despite green Actions UI.
 - Repair: commit `bd1aaedac85e89013dad6e3068160176a16737c9` adds an explicit certification verdict and exits with status 3 on unverified SatSolv SAT/UNSAT answers, wrong answers, SatSolv crashes, or baseline/manifest contradictions.
-- Falsification guard: `tools/benchmark_fail_closed_check.py` deliberately feeds the harness an UNSAT result whose proof is rejected and requires exit 3, preserved JSON evidence, `certification.passed=false`, and a structured `verification_failure`. Latest-head CI run `38205848811` passed this regression.
-- Reverification: full competition acceptance run `38205616073` is the authoritative post-repair run and remains pending until its raw artifact is inspected. No pass is claimed here before that artifact exists.
+- Falsification guard: `tools/benchmark_fail_closed_check.py` deliberately feeds the harness an UNSAT result whose proof is rejected and requires exit 3, preserved JSON evidence, `certification.passed=false`, and a structured `verification_failure`.
+- Reverification: repaired Acceptance Benchmark run `38205616073` completed successfully. Its raw artifact reports `certification.passed=true`, no certification violations, zero SatSolv verification failures, and exact `s VERIFIED` for the 38,155,990-byte `clqcolor` proof.
 
 ## F-008 — Solver runtime and proof-checker runtime were incorrectly coupled
 
-- Reproducer: the same acceptance run `38178398630`; SatSolv reached the UNSAT result in about 14.31 s, emitted a 38.2 MB proof, but `drat-trim` was forced to share the 60 s competitive solver budget and timed out.
+- Reproducer: acceptance run `38178398630`; SatSolv reached the UNSAT result in about 14.31 s, emitted a 38.2 MB proof, but `drat-trim` was forced to share the 60 s competitive solver budget and timed out.
 - Symptom: a solver result that met the 60 s solver requirement could not be certified solely because independent proof checking was constrained by an unrelated competitive-runtime budget.
 - Root cause: `verify_unsat()` reused `--time-limit`, which was intended to measure solver performance, as the proof-verification timeout.
 - Earliest invalidated phase: SPEC/VERIFY boundary for acceptance-resource semantics.
-- Repair: the harness now has an independent `--verification-time-limit`; the acceptance workflow pins it to 300 s while preserving the 60 s per-solver competitive budget and 4 GiB solver memory budget. Commit `dae43af4381791e29f2d20911d7d9091ebe6200b` triggers the post-repair acceptance run.
-- Reverification: pending raw evidence from acceptance run `38205616073`. If `drat-trim` still does not emit exact `s VERIFIED`, the gate remains failed by construction.
+- Repair: the harness now has an independent `--verification-time-limit`; the acceptance workflow pins it to 300 s while preserving the 60 s per-solver competitive budget and 4 GiB solver memory budget.
+- Reverification: Acceptance Benchmark run `38205616073` independently verified the previously problematic `clqcolor` proof in about 33.73 s while preserving the 60 s SatSolv solver budget.
+
+## F-009 — SatSolv internal-error exit was hidden as ordinary UNKNOWN
+
+- Reproducer: raw artifact from repaired Acceptance Benchmark run `38205616073`.
+- Symptom: five competition instances returned SatSolv exit code 3 with `c INTERNAL_ERROR: std::bad_alloc`, but schema-3 acceptance classified their stdout as `UNKNOWN` and left certification green because `crashed` only detected negative signal exits.
+- Affected instances: `SAT_dat.k10.cnf`, `grs-32-160.cnf`, `satcoin-genesis-UNSAT-11900.cnf`, `intervals7.cnf`, and `asconhashv12_opt64_H9_M2-wNfQskE8G_m1_6_U0.c.cnf`.
+- Earliest invalidated phase: VERIFY / evidence interpretation. The earlier run remains valid evidence for independently checked SAT/UNSAT answers, but it cannot close the hard runtime-reliability gate.
+- Repair: commit `fda3d3259896dde872ac3afe842dde7b7d2fc5f7` upgrades benchmark evidence to schema 4, records `solver_errors`, and makes any non-timeout SatSolv exit outside `{0,10,20}` a structured `solver_error` certification violation. Raw JSON is still preserved before the harness exits 3.
+- Falsification guard: `tools/benchmark_internal_error_check.py` runs a synthetic SatSolv that emits an INTERNAL_ERROR and exits 3; it requires schema 4 evidence, `certification.passed=false`, a structured `solver_error`, and benchmark exit 3.
+- Reverification: CI run `38213627773` passed the new internal-error fail-closed regression together with sanitizers, exhaustive/random checks, DRAT certification, benchmark smoke, and the 200-case MiniSat/Kissat differential campaign. Full hardened 30-instance acceptance run `38213565150` remains the final evidence gate.
+
+## F-010 — Unbounded stale EVSIDS heap nodes caused 4 GiB allocator failures
+
+- Reproducer: the five F-009 competition instances under the fixed 4 GiB / 60 s acceptance contract.
+- Symptom: SatSolv terminated with `std::bad_alloc` rather than using the full search budget.
+- Causal investigation:
+  1. Reclaiming deleted learnt-clause literal vectors delayed several failures but all five still failed.
+  2. Removing one stale priority-queue insertion per literal occurrence during initial CNF loading roughly doubled ASCON survival time but did not eliminate the failure.
+  3. Clearing/rebuilding the EVSIDS heap on activity rescale eliminated failures on `SAT_dat.k10.cnf` and `intervals7.cnf`, but three cases still failed.
+  4. Bounding the lazy EVSIDS queue at `max(4096, 4 * (nvars + 1))` and rebuilding from current activity/stamp state eliminated all five allocator failures.
+- Root cause: the lazy priority queue retained stale EVSIDS nodes from repeated variable bumps and activity invalidations; stale nodes were normally discarded only when they reached the top, allowing heap memory to grow without a practical bound on large conflict runs.
+- Repair: source commit `dcf38aa3e14884882d0f2cd2e7821e79adfeed8a` preserves EVSIDS scores, phases, stamps, clause policy, restart policy, and proof semantics while periodically rebuilding the queue from the current valid state. Earlier load-time and rescale cleanups remain in the causal repair chain.
+- Focused reverification: Memory Probe Matrix run `38213459228` passed all five former allocator-failure cases under the same 4 GiB / 60 s contract. Each now reaches a normal exit 0 / `UNKNOWN` after using the full solver budget; no `std::bad_alloc` or crash remains.
+- Correctness reverification: exact-source CI run `38213435636` passed sanitizers, native/exhaustive/random/metamorphic/parser checks, external DRAT certification, benchmark smoke, and the pinned 200-case MiniSat/Kissat differential campaign.
+- Full-corpus reverification: exact-source Acceptance Benchmark run `38213435614` and hardened schema-4 Acceptance Benchmark run `38213565150` are the full 30-instance follow-up gates; no final full-corpus performance or runtime-reliability claim is made before their raw artifacts are inspected.
