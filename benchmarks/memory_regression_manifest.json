@@ -1,0 +1,66 @@
+{
+  "count": 5,
+  "description": "R7 controlled regression set: instances that hit std::bad_alloc under the 4 GiB acceptance limit before learnt-clause storage reclamation.",
+  "instances": [
+    {
+      "competition": "SAT Competition 2023",
+      "expected": "UNSAT",
+      "family": "hardware-verification",
+      "gbd_hash": "008e7716c69009090ff6bd0048dc55f8",
+      "name": "SAT_dat.k10.cnf",
+      "path": "competition/SAT_dat.k10.cnf",
+      "sha256": "ff6b1f96cb0581999a19bbee43e68ada937e7e84fc2cb0eaf33f1ac13507dbc2",
+      "source_filename": "SAT_dat.k10.cnf.xz",
+      "source_sha256": "23544b5be5c0bcf38753011c654a8c6c208c8f530cc9c5e586e742508be1b1df",
+      "url": "http://benchmark-database.de/file/008e7716c69009090ff6bd0048dc55f8"
+    },
+    {
+      "competition": "SAT Competition 2023",
+      "expected": "UNSAT",
+      "family": "grs-fp-comm",
+      "gbd_hash": "0d3e99a07b6a6b67ac59d706c0af9d68",
+      "name": "grs-32-160.cnf",
+      "path": "competition/grs-32-160.cnf",
+      "sha256": "3a511d476d7ea0b9c72d3c923fd617d0619be166631a318273ba2b707a4e2daa",
+      "source_filename": "grs-32-160.cnf.xz",
+      "source_sha256": "2726aa472e9c24b3716c02ddf8e777b4c140c2e4b9b52a91dd04d622f604e66c",
+      "url": "http://benchmark-database.de/file/0d3e99a07b6a6b67ac59d706c0af9d68"
+    },
+    {
+      "competition": "SAT Competition 2023",
+      "expected": "UNSAT",
+      "family": "satcoin",
+      "gbd_hash": "0eb98926b26343d31954169dfbde2b24",
+      "name": "satcoin-genesis-UNSAT-11900.cnf",
+      "path": "competition/satcoin-genesis-UNSAT-11900.cnf",
+      "sha256": "6dc1d99ca20373f8d2de2f61630c19ce86b9939e56709a0916f1562c60ee7590",
+      "source_filename": "satcoin-genesis-UNSAT-11900.cnf.xz",
+      "source_sha256": "6b708ead1beb35532d21130b5f1974c0f07336df4918c2238f1cda844639aa45",
+      "url": "http://benchmark-database.de/file/0eb98926b26343d31954169dfbde2b24"
+    },
+    {
+      "competition": "SAT Competition 2023",
+      "expected": "UNSAT",
+      "family": "interval-matching",
+      "gbd_hash": "4f38f4b005cc54122135c8c21aec4b85",
+      "name": "intervals7.cnf",
+      "path": "competition/intervals7.cnf",
+      "sha256": "b71a55e4a9b0a0b59bdd8c89fbb0066583648c3988f3439b18857b10a84d910d",
+      "source_filename": "intervals7.cnf.xz",
+      "source_sha256": "7d9e1a5dd9de00429813eba350be5263f4b02452b2ab5974878181de0f592ceb",
+      "url": "http://benchmark-database.de/file/4f38f4b005cc54122135c8c21aec4b85"
+    },
+    {
+      "competition": "SAT Competition 2023",
+      "expected": "UNSAT",
+      "family": "cryptography-ascon",
+      "gbd_hash": "558113ad4d50130351db8c426230a50f",
+      "name": "asconhashv12_opt64_H9_M2-wNfQskE8G_m1_6_U0.c.cnf",
+      "path": "competition/asconhashv12_opt64_H9_M2-wNfQskE8G_m1_6_U0.c.cnf",
+      "sha256": "4664a9035fbcf7bd69509df32e8a3df6302259735cff16510f304a6d2774e98b",
+      "source_filename": "asconhashv12_opt64_H9_M2-wNfQskE8G_m1_6_U0.c.cnf.xz",
+      "source_sha256": "f196d3a6e6d5ca16a297894910003ed5b137fa3fe3777b028757bd9ec85f3f55",
+      "url": "http://benchmark-database.de/file/558113ad4d50130351db8c426230a50f"
+    }
+  ]
+}
