@@ -1,0 +1,78 @@
+name: Normalized Activity Prior A/B
+
+on:
+  push:
+    branches: ['r7/search-normalized-activity']
+    paths: ['.github/workflows/normalized-activity-ab.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select frontier plus PRP regression sentinel
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'vmpc_28.shuffled-as.sat05-1957.cnf','DivS_568_11.cnf.sanitized.cnf','combined-crypto1-wff-seed-101-wffvars-500-cryptocplx-31-overlap-2.cnf','brent_69_0.05.cnf','SAT_dat.k10.cnf','rand_net70-40-10.shuffled.cnf','mchess16-mixed-35percent-blocked.cnf','posixpath__joinrealpath_13.cnf','or_randxor_k3_n520_m520.cnf','PRP_30_35.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text()); rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=10: raise SystemExit('diagnostic corpus incomplete')
+          Path('/tmp/corpus.json').write_text(json.dumps({'count':10,'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/corpus.json --dest benchmarks/cache
+      - name: Build baseline zero-seed and normalized candidates
+        run: |
+          git worktree add --detach /tmp/base "$GITHUB_SHA"
+          git worktree add --detach /tmp/zero "$GITHUB_SHA"
+          git worktree add --detach /tmp/norm "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          # Zero-seed control.
+          p=Path('/tmp/zero/src/solver.cpp'); s=p.read_text()
+          old='''        const int cid = add_clause(clause, false);\n        if (cid >= 0) {\n            for (int lit : clauses_[static_cast<std::size_t>(cid)].lits) {\n                const int v = var(lit);\n                activity_[static_cast<std::size_t>(v)] += 1.0;\n            }\n        }'''
+          if old not in s: raise SystemExit('activity seed anchor missing')
+          p.write_text(s.replace(old,'        add_clause(clause, false);',1))
+          # Normalized occurrence prior: preserve initial rank, bound magnitude to <=1.
+          p=Path('/tmp/norm/src/solver.cpp'); s=p.read_text()
+          anchor='''    // Loading-time activity is occurrence based. Rebuild once from final scores instead of\n    // retaining one stale priority-queue entry per literal occurrence.\n    order_heap_ = {};'''
+          repl='''    double max_initial_activity = 0.0;\n    for (int v = 1; v <= nvars_; ++v) max_initial_activity = std::max(max_initial_activity, activity_[static_cast<std::size_t>(v)]);\n    if (max_initial_activity > 0.0) {\n        for (int v = 1; v <= nvars_; ++v) activity_[static_cast<std::size_t>(v)] /= max_initial_activity;\n    }\n\n    // Preserve occurrence-based initial ordering while letting conflict EVSIDS dominate quickly.\n    order_heap_ = {};'''
+          if anchor not in s: raise SystemExit('heap rebuild anchor missing')
+          p.write_text(s.replace(anchor,repl,1))
+          PY
+          for d in /tmp/base /tmp/zero /tmp/norm; do cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release; cmake --build "$d/build" -j2; ctest --test-dir "$d/build" --output-on-failure; done
+      - name: Run certified three-way comparison
+        run: |
+          mkdir -p benchmarks/results/normalized-activity
+          for mode in base zero norm; do python3 tools/benchmark.py --manifest /tmp/corpus.json --root benchmarks/cache --satsolv "/tmp/${mode}/build/satsolv" --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 180 --memory-gib 4 --output "benchmarks/results/normalized-activity/${mode}.json"; done
+      - name: Compare
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for m in ('base','zero','norm'):
+            d=json.loads(Path(f'benchmarks/results/normalized-activity/{m}.json').read_text())
+            if not d['certification']['passed']: raise SystemExit(f'{m} certification failed')
+            print('\n',m,d['summary']['satsolv'])
+            for r in d['rows']:
+              x=r['solvers']['satsolv']; print(r['instance'],x['result'],round(x['elapsed'],3),x.get('verified'))
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: normalized-activity-ab-evidence
+          path: benchmarks/results/normalized-activity/*.json
+          if-no-files-found: error
