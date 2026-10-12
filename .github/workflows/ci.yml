@@ -29,6 +29,8 @@ jobs:
         run: python3 tools/parser_adversarial.py build/satsolv
       - name: Python tool syntax
         run: python3 -m py_compile tools/*.py
+      - name: Fail-closed benchmark certification regression
+        run: python3 tools/benchmark_fail_closed_check.py
       - name: SAT witness independent validation
         shell: bash
         run: |
