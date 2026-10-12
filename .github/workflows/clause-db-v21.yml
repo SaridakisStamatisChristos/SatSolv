@@ -1,0 +1,330 @@
+name: Clause DB v2.1 qualification and gated acceptance
+
+on:
+  push:
+    branches: ['exp/satsolv-v2-clause-db-v21']
+    paths:
+      - src/**
+      - include/**
+      - tests/**
+      - CMakeLists.txt
+      - tools/clause_db_gate.py
+      - tools/reduction_proof_check.py
+      - .github/workflows/clause-db-v21.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build -j2
+      - name: Native unit tests
+        run: ctest --test-dir build --output-on-failure
+      - name: Exhaustive and randomized correctness
+        run: python3 tools/exhaustive_check.py build/satsolv --random 500
+      - name: Metamorphic properties
+        run: python3 tools/metamorphic_check.py build/satsolv --cases 300
+      - name: Malformed DIMACS adversarial cases
+        run: python3 tools/parser_adversarial.py build/satsolv
+      - name: Python tool syntax
+        run: python3 -m py_compile tools/*.py
+      - name: Fail-closed benchmark certification regression
+        run: python3 tools/benchmark_fail_closed_check.py
+      - name: Fail-closed benchmark internal-error regression
+        run: python3 tools/benchmark_internal_error_check.py
+      - name: SAT witness independent validation
+        shell: bash
+        run: |
+          set +e
+          build/satsolv tests/cnf/sat_basic.cnf > sat.out
+          rc=$?
+          set -e
+          test "$rc" -eq 10
+          python3 tools/check_model.py tests/cnf/sat_basic.cnf sat.out
+      - name: Build pinned drat-trim
+        shell: bash
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: External UNSAT DRAT certification
+        shell: bash
+        run: |
+          set +e
+          build/satsolv tests/cnf/unsat_basic.cnf --proof unsat_basic.drat
+          rc1=$?
+          build/satsolv tests/cnf/unsat_units.cnf --proof unsat_units.drat
+          rc2=$?
+          build/satsolv tests/cnf/empty_clause.cnf --proof empty_clause.drat
+          rc3=$?
+          set -e
+          test "$rc1" -eq 20 && test "$rc2" -eq 20 && test "$rc3" -eq 20
+          bash tools/verify_drat.sh /tmp/drat-trim-bin tests/cnf/unsat_basic.cnf unsat_basic.drat
+          bash tools/verify_drat.sh /tmp/drat-trim-bin tests/cnf/unsat_units.cnf unsat_units.drat
+          bash tools/verify_drat.sh /tmp/drat-trim-bin tests/cnf/empty_clause.cnf empty_clause.drat
+      - name: External proof after real clause deletions
+        run: python3 tools/reduction_proof_check.py build/satsolv /tmp/drat-trim-bin benchmarks/results/reduction-proof
+      - name: Certified benchmark harness smoke
+        run: |
+          python3 tools/benchmark.py \
+            --manifest benchmarks/smoke_manifest.json \
+            --root . \
+            --satsolv build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 5 \
+            --memory-gib 4 \
+            --output benchmarks/results/ci-smoke.json
+          python3 tools/report_benchmark.py benchmarks/results/ci-smoke.json benchmarks/results/ci-smoke.md
+      - name: Preserve certification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: certification-artifacts
+          path: |
+            benchmarks/results/reduction-proof/
+            *.drat
+            sat.out
+            benchmarks/results/ci-smoke.json
+            benchmarks/results/ci-smoke.md
+          if-no-files-found: ignore
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure ASan + UBSan
+        run: cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DSATSOLV_ENABLE_SANITIZERS=ON
+      - name: Build sanitizer binary
+        run: cmake --build build-asan -j2
+      - name: Unit tests under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build-asan --output-on-failure
+      - name: Randomized checks under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: python3 tools/exhaustive_check.py build-asan/satsolv --random 100
+
+  differential:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build SatSolv
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2
+      - name: Build pinned MiniSat 2.2.0
+        shell: bash
+        run: |
+          git clone https://github.com/niklasso/minisat.git /tmp/minisat
+          git -C /tmp/minisat checkout eb01ad68b75bb3b34ff8657c37ad6a31faae0fc3
+          export MROOT=/tmp/minisat
+          make -C /tmp/minisat/simp -j2 r CXX="g++ -fpermissive"
+          cp /tmp/minisat/simp/minisat_release /tmp/minisat-bin
+      - name: Build pinned Kissat 4.0.2
+        shell: bash
+        run: |
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout f7e57764c19cf35198830575492dc9d80e872b55
+          cd /tmp/kissat
+          ./configure
+          make -j2
+          cp build/kissat /tmp/kissat-bin
+      - name: Differential logical-result campaign
+        run: python3 tools/differential_check.py --satsolv build/satsolv --minisat /tmp/minisat-bin --kissat /tmp/kissat-bin --cases 200
+
+  compare:
+    needs: [build-and-certify, sanitizers, differential]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select diagnostic corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted = {
+              'clqcolor-08-06-07.shuffled-as.sat05-1257.cnf',
+              'rbsat-v760c43649gyes10.cnf',
+              'vmpc_28.shuffled-as.sat05-1957.cnf',
+              'or_randxor_k3_n520_m520.cnf',
+              'mchess16-mixed-35percent-blocked.cnf',
+              'posixpath__joinrealpath_13.cnf',
+              'rand_net70-40-10.shuffled.cnf',
+              'stb_792_333.apx_1_DS-ST.cnf',
+              'brent_69_0.05.cnf',
+              'SAT_dat.k10.cnf',
+          }
+          src = json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          rows = [x for x in src['instances'] if x['name'] in wanted]
+          if len(rows) != len(wanted):
+              missing = wanted - {x['name'] for x in rows}
+              raise SystemExit(f'diagnostic corpus incomplete: {sorted(missing)}')
+          Path('/tmp/clause-db-v21.json').write_text(json.dumps({'count': len(rows), 'instances': rows}, indent=2) + '\n')
+          PY
+      - name: Fetch and hash-check inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/clause-db-v21.json --dest benchmarks/cache
+      - name: Build baseline and candidate
+        run: |
+          git worktree add --detach /tmp/base b11f47060b99815620569e5fe2ad6b8071e5db01
+          git worktree add --detach /tmp/dbv2 ae855f9da6c6222a6ca9ec495c0b7836d21cad50
+          cmp benchmarks/competition_manifest.json /tmp/base/benchmarks/competition_manifest.json
+          git worktree add --detach /tmp/candidate "$GITHUB_SHA"
+          for d in /tmp/base /tmp/dbv2 /tmp/candidate; do
+            cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$d/build" -j2
+            ctest --test-dir "$d/build" --output-on-failure
+          done
+      - name: Run certified A/B
+        run: |
+          mkdir -p benchmarks/results/clause-db-v21-screen
+          python3 tools/benchmark.py \
+            --manifest /tmp/clause-db-v21.json \
+            --root benchmarks/cache \
+            --satsolv /tmp/base/build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 15 \
+            --verification-time-limit 180 \
+            --memory-gib 4 \
+            --output benchmarks/results/clause-db-v21-screen/base.json
+          python3 tools/benchmark.py \
+            --manifest /tmp/clause-db-v21.json \
+            --root benchmarks/cache \
+            --satsolv /tmp/candidate/build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 15 \
+            --verification-time-limit 180 \
+            --memory-gib 4 \
+            --output benchmarks/results/clause-db-v21-screen/candidate.json
+      - name: Run rejected v2 diagnostic reference
+        run: |
+          python3 tools/benchmark.py \
+            --manifest /tmp/clause-db-v21.json \
+            --root benchmarks/cache \
+            --satsolv /tmp/dbv2/build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 15 \
+            --verification-time-limit 180 \
+            --memory-gib 4 \
+            --output benchmarks/results/clause-db-v21-screen/dbv2.json
+      - name: Focused non-regression and retention-pressure gate
+        run: python3 tools/clause_db_gate.py screen benchmarks/results/clause-db-v21-screen
+      - name: Protect the three Core-v2 solves at the unchanged acceptance limit
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          src = json.loads(Path('/tmp/clause-db-v21.json').read_text())
+          names = {'clqcolor-08-06-07.shuffled-as.sat05-1257.cnf',
+                   'vmpc_28.shuffled-as.sat05-1957.cnf', 'rbsat-v760c43649gyes10.cnf'}
+          rows = [x for x in src['instances'] if x['name'] in names]
+          assert len(rows) == 3
+          Path('/tmp/clause-db-v21-guard.json').write_text(json.dumps({'count':3, 'instances':rows}, indent=2) + '\n')
+          PY
+          for mode in base candidate; do
+            python3 tools/benchmark.py \
+              --manifest /tmp/clause-db-v21-guard.json \
+              --root benchmarks/cache \
+              --satsolv "/tmp/$mode/build/satsolv" \
+              --drat-trim /tmp/drat-trim-bin \
+              --time-limit 60 \
+              --verification-time-limit 300 \
+              --memory-gib 4 \
+              --output "benchmarks/results/clause-db-v21-guard/$mode.json"
+          done
+      - name: Protected-solves non-regression gate
+        run: python3 tools/clause_db_gate.py guard benchmarks/results/clause-db-v21-guard
+      - name: Upload A/B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clause-db-v21-screen-evidence
+          path: |
+            benchmarks/results/clause-db-v21-screen/*.json
+            benchmarks/results/clause-db-v21-guard/*.json
+          if-no-files-found: error
+
+  acceptance:
+    needs: compare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      SATSOLV_BENCH_TIME_LIMIT: '60'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require resolved competition manifest
+        run: test -f benchmarks/competition_manifest.json || { echo 'competition_manifest.json is not resolved yet'; exit 2; }
+      - name: Build SatSolv
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2
+      - name: Build drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Build MiniSat
+        run: |
+          git clone https://github.com/niklasso/minisat.git /tmp/minisat
+          git -C /tmp/minisat checkout eb01ad68b75bb3b34ff8657c37ad6a31faae0fc3
+          export MROOT=/tmp/minisat
+          make -C /tmp/minisat/simp -j2 r CXX="g++ -fpermissive"
+          cp /tmp/minisat/simp/minisat_release /tmp/minisat-bin
+      - name: Build Kissat
+        run: |
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout f7e57764c19cf35198830575492dc9d80e872b55
+          cd /tmp/kissat && ./configure && make -j2
+          cp build/kissat /tmp/kissat-bin
+      - name: Fetch and hash-check benchmark inputs
+        run: python3 tools/fetch_benchmarks.py --manifest benchmarks/competition_manifest.json --dest benchmarks/cache
+      - name: Execute certified comparison
+        run: |
+          python3 tools/benchmark.py \
+            --manifest benchmarks/competition_manifest.json \
+            --root benchmarks/cache \
+            --satsolv build/satsolv \
+            --minisat /tmp/minisat-bin \
+            --kissat /tmp/kissat-bin \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit "$SATSOLV_BENCH_TIME_LIMIT" \
+            --verification-time-limit 300 \
+            --memory-gib 4 \
+            --output benchmarks/results/acceptance.json
+      - name: Full acceptance target
+        run: |
+          mkdir -p benchmarks/results/clause-db-v21-full
+          cp benchmarks/results/acceptance.json benchmarks/results/clause-db-v21-full/candidate.json
+          python3 tools/clause_db_gate.py full benchmarks/results/clause-db-v21-full
+      - name: Generate comparison table
+        if: always()
+        run: test ! -f benchmarks/results/acceptance.json || python3 tools/report_benchmark.py benchmarks/results/acceptance.json benchmarks/results/acceptance.md
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clause-db-v21-acceptance-results
+          path: |
+            benchmarks/results/acceptance.json
+            benchmarks/results/acceptance.md
+            benchmarks/results/clause-db-v21-full/gate.json
+          if-no-files-found: warn
+
+# R7/Core-v2 acceptance run: solver budget and independent proof-verification budget are explicit and fail closed.
+

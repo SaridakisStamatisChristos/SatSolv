@@ -57,6 +57,7 @@ void Solver::reset(int variables) {
     nvars_ = variables;
     stats_ = {};
     clauses_.clear();
+    quality_.clear();
     literal_arena_.clear();
     dead_literals_ = 0;
     watches_.assign(static_cast<std::size_t>(2 * variables), {});
@@ -130,6 +131,12 @@ int Solver::add_clause(const std::vector<int>& input, bool learnt, int lbd) {
     clause.lbd = lbd;
     literal_arena_.insert(literal_arena_.end(), source->begin(), source->end());
     clauses_.push_back(clause);
+    ClauseQuality quality;
+    quality.created = quality.touched = stats_.conflicts;
+    if (learnt) set_clause_tier(quality,
+        lbd <= 2 || clause.size <= 2 ? ClauseTier::Core : ClauseTier::Local);
+    quality_.push_back(quality);
+    if (clause.size >= 2) stats_.live_watchers += 2;
 
     Clause& stored = clauses_.back();
     if (stored.size == 0) {
@@ -413,9 +420,25 @@ void Solver::analyze(int conflict_clause, std::vector<int>& learnt, int& backtra
         if (c.deleted) throw std::logic_error("conflict analysis reached deleted clause");
         c.activity += 1.0;
 
+        // Fuse dynamic LBD with the existing analysis traversal, avoiding
+        // a second scan and avoiding writes in the BCP hot path.
+        const bool track_lbd = c.learnt && c.lbd > 2;
+        int current_lbd = 0;
+        if (track_lbd && ++level_epoch_ == 0) {
+            std::fill(level_marks_.begin(), level_marks_.end(), 0);
+            level_epoch_ = 1;
+        }
+
         for (std::size_t i = 0; i < static_cast<std::size_t>(c.size); ++i) {
             const int q = clause_lit(c, i);
             const int v = var(q);
+            if (track_lbd) {
+                const auto level = static_cast<std::size_t>(levels_[static_cast<std::size_t>(v)]);
+                if (level_marks_[level] != level_epoch_) {
+                    level_marks_[level] = level_epoch_;
+                    ++current_lbd;
+                }
+            }
             if (p != 0 && v == var(p)) continue;
             if (analyze_seen_[static_cast<std::size_t>(v)] != 0 || levels_[static_cast<std::size_t>(v)] == 0) continue;
             analyze_seen_[static_cast<std::size_t>(v)] = 1;
@@ -424,6 +447,8 @@ void Solver::analyze(int conflict_clause, std::vector<int>& learnt, int& backtra
             if (levels_[static_cast<std::size_t>(v)] == decision_level()) ++path_count;
             else learnt.push_back(q);
         }
+
+        if (c.learnt) refresh_clause_quality(cid, track_lbd ? current_lbd : c.lbd);
 
         while (true) {
             if (trail_index == 0) throw std::logic_error("conflict analysis trail underflow");
@@ -483,31 +508,122 @@ void Solver::compact_clause_arena() {
     dead_literals_ = 0;
 }
 
+void Solver::refresh_clause_quality(int cid, int current_lbd) {
+    Clause& c = clauses_[static_cast<std::size_t>(cid)];
+    ClauseQuality& q = quality_[static_cast<std::size_t>(cid)];
+    if (!c.learnt || c.deleted) return;
+    if (q.touched != stats_.conflicts) {
+        if (q.uses < 2) ++q.uses;
+        if (q.tier == ClauseTier::Tier2) q.tier2_reused = true;
+    }
+    q.touched = stats_.conflicts;
+    const bool improved = current_lbd < c.lbd;
+    if (improved) c.lbd = current_lbd;
+    const ClauseTier target = c.lbd <= 2 || c.size <= 2 ? ClauseTier::Core :
+        (c.lbd <= 4 && (improved || q.uses >= 2) ? ClauseTier::Tier2 : ClauseTier::Local);
+    if (target != q.tier) {
+        if (target == ClauseTier::Core || target == ClauseTier::Tier2) ++stats_.promotions;
+        else ++stats_.demotions;
+        set_clause_tier(q, target);
+    }
+    if (target == ClauseTier::Tier2) q.was_tier2 = true;
+}
+
+void Solver::set_clause_tier(ClauseQuality& q, ClauseTier tier) {
+    auto count = [this](ClauseTier t) -> std::uint64_t* {
+        switch (t) {
+            case ClauseTier::Core: return &stats_.core_count;
+            case ClauseTier::Tier2: return &stats_.tier2_count;
+            case ClauseTier::Local: return &stats_.local_count;
+            case ClauseTier::Original: return nullptr;
+        }
+        return nullptr;
+    };
+    if (auto* old_count = count(q.tier)) --*old_count;
+    if (auto* new_count = count(tier)) ++*new_count;
+    q.tier = tier;
+}
+
+void Solver::snapshot_database_stats() {
+    stats_.peak_live_learnt = std::max(stats_.peak_live_learnt,
+        stats_.core_count + stats_.tier2_count + stats_.local_count);
+    stats_.peak_tier2 = std::max(stats_.peak_tier2, stats_.tier2_count);
+    stats_.peak_arena_literals = std::max(stats_.peak_arena_literals,
+        static_cast<std::uint64_t>(literal_arena_.size()));
+    stats_.peak_live_watchers = std::max(stats_.peak_live_watchers, stats_.live_watchers);
+    stats_.database_bytes = static_cast<std::uint64_t>(
+        clauses_.capacity() * sizeof(Clause) + quality_.capacity() * sizeof(ClauseQuality) +
+        literal_arena_.capacity() * sizeof(int));
+}
+
 void Solver::reduce_database() {
-    std::vector<int> candidates;
+    std::vector<int> candidates, tier2;
+    const auto interval = static_cast<std::uint64_t>(config_.reduce_interval);
+    std::size_t eligible = 0;
+    ++stats_.reductions;
+    snapshot_database_stats();
     for (int cid = 0; cid < static_cast<int>(clauses_.size()); ++cid) {
         const Clause& c = clauses_[static_cast<std::size_t>(cid)];
-        if (!c.learnt || c.deleted || c.size <= 2 || c.lbd <= 2 || clause_locked(cid)) continue;
-        candidates.push_back(cid);
+        if (!c.learnt || c.deleted || c.size <= 2 || c.lbd <= 2) continue;
+        ClauseQuality& q = quality_[static_cast<std::size_t>(cid)];
+        // Staleness applies even while a clause is locked. Locking protects
+        // deletion, not indefinite TIER2 membership.
+        if (q.tier == ClauseTier::Tier2 && stats_.conflicts - q.touched >= interval) {
+            set_clause_tier(q, ClauseTier::Local);
+            q.uses = 0;
+            ++stats_.demotions;
+        }
+        if (clause_locked(cid)) continue;
+        ++eligible;
+        if (q.tier == ClauseTier::Tier2) tier2.push_back(cid);
+        else candidates.push_back(cid);
     }
 
-    std::sort(candidates.begin(), candidates.end(), [this](int a, int b) {
+    auto worse = [this](int a, int b) {
         const Clause& ca = clauses_[static_cast<std::size_t>(a)];
         const Clause& cb = clauses_[static_cast<std::size_t>(b)];
+        const ClauseQuality& qa = quality_[static_cast<std::size_t>(a)];
+        const ClauseQuality& qb = quality_[static_cast<std::size_t>(b)];
         if (ca.lbd != cb.lbd) return ca.lbd > cb.lbd;
+        if (qa.touched != qb.touched) return qa.touched < qb.touched;
         if (ca.activity != cb.activity) return ca.activity < cb.activity;
-        return ca.size > cb.size;
-    });
-
-    const std::size_t remove_count = candidates.size() / 2;
+        if (qa.created != qb.created) return qa.created < qb.created;
+        if (ca.size != cb.size) return ca.size > cb.size;
+        return a < b;
+    };
+    std::sort(tier2.begin(), tier2.end(), worse);
+    // Protect at most R and one quarter of the eligible pool. Thus LOCAL
+    // always contains enough clauses to restore Core-v2 half-pool deletion.
+    const std::size_t cap = std::min(static_cast<std::size_t>(interval), eligible / 4);
+    const std::size_t excess = tier2.size() > cap ? tier2.size() - cap : 0;
+    for (std::size_t i = 0; i < excess; ++i) {
+        ClauseQuality& q = quality_[static_cast<std::size_t>(tier2[i])];
+        set_clause_tier(q, ClauseTier::Local);
+        q.uses = 0;
+        ++stats_.demotions;
+        candidates.push_back(tier2[i]);
+    }
+    std::sort(candidates.begin(), candidates.end(), worse);
+    const std::size_t remove_count = eligible / 2;
+    if (candidates.size() < remove_count) throw std::logic_error("retention cap violated");
     for (std::size_t i = 0; i < remove_count; ++i) {
-        Clause& c = clauses_[static_cast<std::size_t>(candidates[i])];
-        if (c.reason_refs != 0) continue;
+        const auto cid = static_cast<std::size_t>(candidates[i]);
+        Clause& c = clauses_[cid];
+        ClauseQuality& q = quality_[cid];
+        if (c.reason_refs != 0 || c.deleted || c.size <= 2 || c.lbd <= 2)
+            throw std::logic_error("protected clause selected for deletion");
         c.deleted = true;
         dead_literals_ += static_cast<std::size_t>(c.size);
         ++stats_.deleted_learnt_clauses;
+        if (q.tier == ClauseTier::Core) ++stats_.deleted_core;
+        else if (q.tier == ClauseTier::Tier2) ++stats_.deleted_tier2;
+        else ++stats_.deleted_local;
+        if (q.was_tier2 && q.tier2_reused) ++stats_.tier2_reused_before_deletion;
+        stats_.deletion_age_sum += stats_.conflicts - q.created;
+        stats_.live_watchers -= 2;
+        set_clause_tier(q, ClauseTier::Original);
     }
-
+    snapshot_database_stats();
     const std::size_t compact_floor = 4096;
     if (dead_literals_ >= compact_floor && dead_literals_ >= literal_arena_.size() / 4) {
         compact_clause_arena();
@@ -569,6 +685,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     }
     literal_arena_.reserve(initial_literals + initial_literals / 4 + 1024);
     clauses_.reserve(formula.clauses.size() + 1024);
+    quality_.reserve(formula.clauses.size() + 1024);
 
     if (proof_path) {
         proof_.open(*proof_path, std::ios::out | std::ios::trunc | std::ios::binary);
@@ -677,6 +794,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
         }
     }
 
+    snapshot_database_stats();
     stats_.solve_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time_).count();
     if (proof_enabled_) {
         proof_.flush();
@@ -688,3 +806,4 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
 }
 
 } // namespace satsolv
+

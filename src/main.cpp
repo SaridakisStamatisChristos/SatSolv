@@ -56,7 +56,25 @@ void write_stats_json(const std::filesystem::path& path,
         << "  \"learnt_clauses\": " << s.learnt_clauses << ",\n"
         << "  \"deleted_learnt_clauses\": " << s.deleted_learnt_clauses << ",\n"
         << "  \"max_trail\": " << s.max_trail << ",\n"
-        << "  \"proof_bytes\": " << s.proof_bytes << "\n"
+        << "  \"proof_bytes\": " << s.proof_bytes << ",\n"
+        << "  \"core_count\": " << s.core_count << ",\n"
+        << "  \"tier2_count\": " << s.tier2_count << ",\n"
+        << "  \"local_count\": " << s.local_count << ",\n"
+        << "  \"peak_live_learnt\": " << s.peak_live_learnt << ",\n"
+        << "  \"peak_tier2\": " << s.peak_tier2 << ",\n"
+        << "  \"promotions\": " << s.promotions << ",\n"
+        << "  \"demotions\": " << s.demotions << ",\n"
+        << "  \"deleted_core\": " << s.deleted_core << ",\n"
+        << "  \"deleted_tier2\": " << s.deleted_tier2 << ",\n"
+        << "  \"deleted_local\": " << s.deleted_local << ",\n"
+        << "  \"tier2_reused_before_deletion\": " << s.tier2_reused_before_deletion << ",\n"
+        << "  \"deletion_age_sum\": " << s.deletion_age_sum << ",\n"
+        << "  \"reductions\": " << s.reductions << ",\n"
+        << "  \"peak_arena_literals\": " << s.peak_arena_literals << ",\n"
+        << "  \"peak_live_watchers\": " << s.peak_live_watchers << ",\n"
+        << "  \"live_watchers\": " << s.live_watchers << ",\n"
+        << "  \"database_bytes\": " << s.database_bytes << ",\n"
+        << "  \"average_deletion_age\": " << (s.deleted_learnt_clauses ? static_cast<double>(s.deletion_age_sum) / static_cast<double>(s.deleted_learnt_clauses) : 0.0) << "\n"
         << "}\n";
 }
 
@@ -150,3 +168,4 @@ int main(int argc, char** argv) {
         return 3;
     }
 }
+
