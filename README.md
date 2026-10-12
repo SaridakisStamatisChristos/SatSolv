@@ -1,12 +1,14 @@
 # SatSolv
 
-SatSolv is a native C++20 CDCL SAT solver built around a falsifiable correctness contract: SAT answers are checked by an independent model evaluator, and certified UNSAT answers carry DRAT proofs intended for independent `drat-trim` verification.
+SatSolv is a native C++20 CDCL SAT solver built around a falsifiable correctness contract: SAT answers are checked by an independent model evaluator, and certified UNSAT answers carry DRAT proofs for independent `drat-trim` verification.
 
 ## Current status
 
 The solver core, parser, First-UIP analysis, two-watched-literal propagation, EVSIDS-style branching, phase saving, Luby restarts, LBD metadata, conservative learnt-clause minimization/reduction, proof logging, independent model checking, exhaustive/property tests, differential-test tooling, sanitizer configuration, and resource-limited benchmark harness are implemented.
 
-**Important:** repository presence is not certification. See `docs/r7-contract.md` and `evidence/` for evidence states. The public SAT Competition acceptance slice is not considered complete until exact instances/hashes and raw comparative results are frozen.
+The acceptance corpus is a resolved, SHA-256-pinned **30-instance SAT Competition 2023 slice**. Pinned MiniSat, Kissat, and `drat-trim` comparisons are operational. A repaired full-corpus artifact has independently validated every SatSolv SAT/UNSAT answer it counted, including a 38,155,990-byte UNSAT DRAT proof. Subsequent raw-evidence review exposed five exit-code-3 `std::bad_alloc` cases that the older evidence schema had treated as ordinary UNKNOWN. The solver memory path and benchmark semantics have since been repaired; focused 4 GiB regression probes and CI are green, while the final schema-4 full-corpus revalidation remains an explicit evidence gate.
+
+**Important:** repository presence and a green Actions badge are not certification. See `docs/r7-contract.md` and `evidence/failure-repair-ledger.md` for the current evidence states and falsification history. No production-ready or global-performance claim is made while a hard R7 requirement remains `REVERIFYING`.
 
 ## Build
 
@@ -66,20 +68,24 @@ python3 tools/exhaustive_check.py build-asan/satsolv --random 100
 
 ## Benchmark harness
 
-The benchmark runner treats a SatSolv row as solved only after independent validation.
+The benchmark runner is fail closed. It counts a SatSolv row as solved only after independent validation, and it treats a non-timeout exit outside `{0,10,20}` as a certification failure rather than hiding it as UNKNOWN.
 
 ```bash
 python3 tools/benchmark.py \
-  --manifest benchmarks/smoke_manifest.json \
-  --root . \
+  --manifest benchmarks/competition_manifest.json \
+  --root benchmarks/cache \
   --satsolv build/satsolv \
+  --minisat /path/to/minisat \
+  --kissat /path/to/kissat \
   --drat-trim /path/to/drat-trim \
-  --time-limit 10 \
-  --output benchmarks/results/smoke.json
-python3 tools/report_benchmark.py benchmarks/results/smoke.json benchmarks/results/smoke.md
+  --time-limit 60 \
+  --verification-time-limit 300 \
+  --memory-gib 4 \
+  --output benchmarks/results/acceptance.json
+python3 tools/report_benchmark.py benchmarks/results/acceptance.json benchmarks/results/acceptance.md
 ```
 
-Raw JSON retains solver commands/stdout/stderr and verification transcripts; the Markdown table is generated from that evidence. For acceptance, add the pinned MiniSat and Kissat binaries and use a resolved SAT Competition manifest. See `docs/benchmarking.md`.
+Raw schema-4 JSON retains solver commands/stdout/stderr, exit codes, resource outcomes, proof/model verification transcripts, repository/tool versions, and manifest provenance. Human-readable Markdown is generated from that raw evidence. See `docs/benchmarking.md`.
 
 ## Design documents
 
@@ -92,4 +98,4 @@ Raw JSON retains solver commands/stdout/stderr and verification transcripts; the
 
 ## Known limitations
 
-The current solver intentionally avoids preprocessing/inprocessing whose proof steps are not implemented. Gzip CNF input is not yet supported. The full 30–60 instance SAT Competition acceptance campaign still requires resolved SHA-256-pinned benchmark inputs and measured SatSolv/MiniSat/Kissat results; until that evidence exists, no global performance or production-ready claim is made.
+The current solver intentionally avoids preprocessing/inprocessing whose proof steps are not implemented. Gzip CNF input is not yet supported. SatSolv is materially behind Kissat on solved-count coverage in the current public benchmark evidence, so performance engineering remains active even though independently checked SAT/UNSAT soundness evidence is strong. Final R7 acceptance additionally requires the hardened schema-4 full-corpus run to close without solver errors, crashes, or verification failures.
