@@ -1,0 +1,78 @@
+name: EVSIDS + Blocker Combo A/B
+
+on:
+  push:
+    branches: ['r7/search-activity-seed-ab']
+    paths: ['.github/workflows/evsids-blocker-combo-ab.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select frozen frontier corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'vmpc_28.shuffled-as.sat05-1957.cnf','DivS_568_11.cnf.sanitized.cnf','combined-crypto1-wff-seed-101-wffvars-500-cryptocplx-31-overlap-2.cnf','brent_69_0.05.cnf','SAT_dat.k10.cnf','rand_net70-40-10.shuffled.cnf','mchess16-mixed-35percent-blocked.cnf','posixpath__joinrealpath_13.cnf','or_randxor_k3_n520_m520.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text()); rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=len(wanted): raise SystemExit('frontier incomplete')
+          Path('/tmp/frontier.json').write_text(json.dumps({'count':len(rows),'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch and hash-check inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/frontier.json --dest benchmarks/cache
+      - name: Build conflict-only baseline and blocker combo
+        run: |
+          git worktree add --detach /tmp/evsids "$GITHUB_SHA"
+          git worktree add --detach /tmp/combo "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          old='''        const int cid = add_clause(clause, false);\n        if (cid >= 0) {\n            for (int lit : clauses_[static_cast<std::size_t>(cid)].lits) {\n                const int v = var(lit);\n                activity_[static_cast<std::size_t>(v)] += 1.0;\n            }\n        }'''
+          for root in ('/tmp/evsids','/tmp/combo'):
+            p=Path(root+'/src/solver.cpp'); s=p.read_text()
+            if old not in s: raise SystemExit('activity anchor missing')
+            p.write_text(s.replace(old,'        add_clause(clause, false);',1))
+          hp=Path('/tmp/combo/include/satsolv/solver.hpp'); h=hp.read_text()
+          h=h.replace('    struct HeapEntry {\n','    struct Watcher {\n        int clause = -1;\n        int blocker = 0;\n    };\n\n    struct HeapEntry {\n',1)
+          h=h.replace('    std::vector<std::vector<int>> watches_;','    std::vector<std::vector<Watcher>> watches_;',1); hp.write_text(h)
+          sp=Path('/tmp/combo/src/solver.cpp'); s=sp.read_text()
+          s=s.replace('    watches_[static_cast<std::size_t>(lit_index(c.lits[0]))].push_back(cid);\n    watches_[static_cast<std::size_t>(lit_index(c.lits[1]))].push_back(cid);','    watches_[static_cast<std::size_t>(lit_index(c.lits[0]))].push_back(Watcher{cid, c.lits[1]});\n    watches_[static_cast<std::size_t>(lit_index(c.lits[1]))].push_back(Watcher{cid, c.lits[0]});',1)
+          start=s.index('int Solver::propagate() {'); end=s.index('\nvoid Solver::cancel_until',start)
+          enc='aW50IFNvbHZlcjo6cHJvcGFnYXRlKCkgewogICAgd2hpbGUgKHFoZWFkXyA8IHRyYWlsXy5zaXplKCkpIHsKICAgICAgICBjb25zdCBpbnQgcCA9IHRyYWlsX1txaGVhZF8rK107CiAgICAgICAgKytzdGF0c18ucHJvcGFnYXRpb25zOwogICAgICAgIGF1dG8mIHdzID0gd2F0Y2hlc19bc3RhdGljX2Nhc3Q8c3RkOjpzaXplX3Q+KGxpdF9pbmRleCgtcCkpXTsKICAgICAgICBzdGQ6OnNpemVfdCBpID0gMDsKICAgICAgICB3aGlsZSAoaSA8IHdzLnNpemUoKSkgewogICAgICAgICAgICBpZiAodmFsdWVfbGl0KHdzW2ldLmJsb2NrZXIpID09IDEpIHsgKytpOyBjb250aW51ZTsgfQogICAgICAgICAgICBjb25zdCBpbnQgY2lkID0gd3NbaV0uY2xhdXNlOwogICAgICAgICAgICBDbGF1c2UmIGMgPSBjbGF1c2VzX1tzdGF0aWNfY2FzdDxzdGQ6OnNpemVfdD4oY2lkKV07CiAgICAgICAgICAgIGlmIChjLmRlbGV0ZWQpIHsgd3NbaV0gPSB3cy5iYWNrKCk7IHdzLnBvcF9iYWNrKCk7IGNvbnRpbnVlOyB9CiAgICAgICAgICAgIGludCBmYWxzZV9zbG90PS0xLCBvdGhlcl9zbG90PS0xOwogICAgICAgICAgICBpZiAoYy5saXRzW3N0YXRpY19jYXN0PHN0ZDo6c2l6ZV90PihjLndhdGNoMCldID09IC1wKSB7IGZhbHNlX3Nsb3Q9Yy53YXRjaDA7IG90aGVyX3Nsb3Q9Yy53YXRjaDE7IH0KICAgICAgICAgICAgZWxzZSBpZiAoYy5saXRzW3N0YXRpY19jYXN0PHN0ZDo6c2l6ZV90PihjLndhdGNoMSldID09IC1wKSB7IGZhbHNlX3Nsb3Q9Yy53YXRjaDE7IG90aGVyX3Nsb3Q9Yy53YXRjaDA7IH0KICAgICAgICAgICAgZWxzZSB7IHdzW2ldPXdzLmJhY2soKTsgd3MucG9wX2JhY2soKTsgY29udGludWU7IH0KICAgICAgICAgICAgY29uc3QgaW50IG90aGVyX2xpdD1jLmxpdHNbc3RhdGljX2Nhc3Q8c3RkOjpzaXplX3Q+KG90aGVyX3Nsb3QpXTsKICAgICAgICAgICAgd3NbaV0uYmxvY2tlcj1vdGhlcl9saXQ7CiAgICAgICAgICAgIGlmICh2YWx1ZV9saXQob3RoZXJfbGl0KT09MSkgeyArK2k7IGNvbnRpbnVlOyB9CiAgICAgICAgICAgIGJvb2wgbW92ZWQ9ZmFsc2U7CiAgICAgICAgICAgIGZvciAoaW50IGs9MDsgazxzdGF0aWNfY2FzdDxpbnQ+KGMubGl0cy5zaXplKCkpOyArK2spIHsKICAgICAgICAgICAgICAgIGlmIChrPT1jLndhdGNoMCB8fCBrPT1jLndhdGNoMSkgY29udGludWU7CiAgICAgICAgICAgICAgICBjb25zdCBpbnQgY2FuZGlkYXRlPWMubGl0c1tzdGF0aWNfY2FzdDxzdGQ6OnNpemVfdD4oayldOwogICAgICAgICAgICAgICAgaWYgKHZhbHVlX2xpdChjYW5kaWRhdGUpIT0wKSB7CiAgICAgICAgICAgICAgICAgICAgaWYgKGZhbHNlX3Nsb3Q9PWMud2F0Y2gwKSBjLndhdGNoMD1rOyBlbHNlIGMud2F0Y2gxPWs7CiAgICAgICAgICAgICAgICAgICAgd3NbaV09d3MuYmFjaygpOyB3cy5wb3BfYmFjaygpOwogICAgICAgICAgICAgICAgICAgIHdhdGNoZXNfW3N0YXRpY19jYXN0PHN0ZDo6c2l6ZV90PihsaXRfaW5kZXgoY2FuZGlkYXRlKSldLnB1c2hfYmFjayhXYXRjaGVye2NpZCxvdGhlcl9saXR9KTsKICAgICAgICAgICAgICAgICAgICBtb3ZlZD10cnVlOyBicmVhazsKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQogICAgICAgICAgICBpZiAobW92ZWQpIGNvbnRpbnVlOwogICAgICAgICAgICBjb25zdCBpbnQgb3RoZXJfdmFsdWU9dmFsdWVfbGl0KG90aGVyX2xpdCk7CiAgICAgICAgICAgIGlmIChvdGhlcl92YWx1ZT09MCkgcmV0dXJuIGNpZDsKICAgICAgICAgICAgaWYgKCFlbnF1ZXVlKG90aGVyX2xpdCxjaWQpKSByZXR1cm4gY2lkOwogICAgICAgICAgICArK2k7CiAgICAgICAgfQogICAgICAgIGlmICgoc3RhdHNfLnByb3BhZ2F0aW9ucyAmIDB4M0ZGRlUpID09IDBVICYmIHRpbWVkX291dCgpKSByZXR1cm4gLTI7CiAgICB9CiAgICByZXR1cm4gLTE7Cn0K'
+          sp.write_text(s[:start]+base64.b64decode(enc).decode()+s[end:])
+          PY
+          for d in /tmp/evsids /tmp/combo; do cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release; cmake --build "$d/build" -j2; ctest --test-dir "$d/build" --output-on-failure; done
+      - name: Run certified combo A/B
+        run: |
+          mkdir -p benchmarks/results/evsids-blocker-combo
+          for mode in evsids combo; do python3 tools/benchmark.py --manifest /tmp/frontier.json --root benchmarks/cache --satsolv "/tmp/${mode}/build/satsolv" --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 180 --memory-gib 4 --output "benchmarks/results/evsids-blocker-combo/${mode}.json"; done
+      - name: Compare
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for m in ('evsids','combo'):
+            d=json.loads(Path(f'benchmarks/results/evsids-blocker-combo/{m}.json').read_text()); assert d['certification']['passed']; print(m,d['summary']['satsolv'])
+            for r in d['rows']:
+              x=r['solvers']['satsolv']; print(m,r['instance'],x['result'],round(x['elapsed'],3))
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evsids-blocker-combo-evidence
+          path: benchmarks/results/evsids-blocker-combo/*.json
+          if-no-files-found: error
