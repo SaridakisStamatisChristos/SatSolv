@@ -1,0 +1,92 @@
+name: Watch Blocker A/B v2
+
+on:
+  push:
+    branches: ['r7/perf-watch-blocker-probe']
+    paths:
+      - .github/workflows/watch-blocker-ab-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select propagation-heavy diagnostic corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'stb_792_333.apx_1_DS-ST.cnf','brent_69_0.05.cnf','32_0.cnf','spg_420_280.cnf','SAT_dat.k10.cnf','rand_net70-40-10.shuffled.cnf','grs-32-160.cnf','sat-bench-trig-taylor4.cnf','minxor128.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=len(wanted): raise SystemExit('diagnostic corpus incomplete')
+          Path('/tmp/bcp.json').write_text(json.dumps({'count':len(rows),'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch and hash-check inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/bcp.json --dest benchmarks/cache
+      - name: Build baseline and blocker candidate
+        run: |
+          git worktree add --detach /tmp/base "$GITHUB_SHA"
+          git worktree add --detach /tmp/candidate "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          hp=Path('/tmp/candidate/include/satsolv/solver.hpp')
+          h=hp.read_text()
+          h=h.replace('    struct HeapEntry {\n','    struct Watcher {\n        int clause = -1;\n        int blocker = 0;\n    };\n\n    struct HeapEntry {\n',1)
+          old='    std::vector<std::vector<int>> watches_;'
+          if old not in h: raise SystemExit('header watches anchor missing')
+          h=h.replace(old,'    std::vector<std::vector<Watcher>> watches_;',1)
+          hp.write_text(h)
+          sp=Path('/tmp/candidate/src/solver.cpp')
+          s=sp.read_text()
+          old_add='    watches_[static_cast<std::size_t>(lit_index(c.lits[0]))].push_back(cid);\n    watches_[static_cast<std::size_t>(lit_index(c.lits[1]))].push_back(cid);'
+          new_add='    watches_[static_cast<std::size_t>(lit_index(c.lits[0]))].push_back(Watcher{cid, c.lits[1]});\n    watches_[static_cast<std::size_t>(lit_index(c.lits[1]))].push_back(Watcher{cid, c.lits[0]});'
+          if old_add not in s: raise SystemExit('watch insertion anchor missing')
+          s=s.replace(old_add,new_add,1)
+          start=s.index('int Solver::propagate() {'); end=s.index('\nvoid Solver::cancel_until',start)
+          enc='aW50IFNvbHZlcjo6cHJvcGFnYXRlKCkgewogICAgd2hpbGUgKHFoZWFkXyA8IHRyYWlsXy5zaXplKCkpIHsKICAgICAgICBjb25zdCBpbnQgcCA9IHRyYWlsX1txaGVhZF8rK107CiAgICAgICAgKytzdGF0c18ucHJvcGFnYXRpb25zOwogICAgICAgIGF1dG8mIHdzID0gd2F0Y2hlc19bc3RhdGljX2Nhc3Q8c3RkOjpzaXplX3Q+KGxpdF9pbmRleCgtcCkpXTsKICAgICAgICBzdGQ6OnNpemVfdCBpID0gMDsKICAgICAgICB3aGlsZSAoaSA8IHdzLnNpemUoKSkgewogICAgICAgICAgICBpZiAodmFsdWVfbGl0KHdzW2ldLmJsb2NrZXIpID09IDEpIHsKICAgICAgICAgICAgICAgICsraTsKICAgICAgICAgICAgICAgIGNvbnRpbnVlOwogICAgICAgICAgICB9CgogICAgICAgICAgICBjb25zdCBpbnQgY2lkID0gd3NbaV0uY2xhdXNlOwogICAgICAgICAgICBDbGF1c2UmIGMgPSBjbGF1c2VzX1tzdGF0aWNfY2FzdDxzdGQ6OnNpemVfdD4oY2lkKV07CiAgICAgICAgICAgIGlmIChjLmRlbGV0ZWQpIHsKICAgICAgICAgICAgICAgIHdzW2ldID0gd3MuYmFjaygpOwogICAgICAgICAgICAgICAgd3MucG9wX2JhY2soKTsKICAgICAgICAgICAgICAgIGNvbnRpbnVlOwogICAgICAgICAgICB9CgogICAgICAgICAgICBpbnQgZmFsc2Vfc2xvdCA9IC0xOwogICAgICAgICAgICBpbnQgb3RoZXJfc2xvdCA9IC0xOwogICAgICAgICAgICBpZiAoYy5saXRzW3N0YXRpY19jYXN0PHN0ZDo6c2l6ZV90PihjLndhdGNoMCldID09IC1wKSB7CiAgICAgICAgICAgICAgICBmYWxzZV9zbG90ID0gYy53YXRjaDA7CiAgICAgICAgICAgICAgICBvdGhlcl9zbG90ID0gYy53YXRjaDE7CiAgICAgICAgICAgIH0gZWxzZSBpZiAoYy5saXRzW3N0YXRpY19jYXN0PHN0ZDo6c2l6ZV90PihjLndhdGNoMSldID09IC1wKSB7CiAgICAgICAgICAgICAgICBmYWxzZV9zbG90ID0gYy53YXRjaDE7CiAgICAgICAgICAgICAgICBvdGhlcl9zbG90ID0gYy53YXRjaDA7CiAgICAgICAgICAgIH0gZWxzZSB7CiAgICAgICAgICAgICAgICB3c1tpXSA9IHdzLmJhY2soKTsKICAgICAgICAgICAgICAgIHdzLnBvcF9iYWNrKCk7CiAgICAgICAgICAgICAgICBjb250aW51ZTsKICAgICAgICAgICAgfQoKICAgICAgICAgICAgY29uc3QgaW50IG90aGVyX2xpdCA9IGMubGl0c1tzdGF0aWNfY2FzdDxzdGQ6OnNpemVfdD4ob3RoZXJfc2xvdCldOwogICAgICAgICAgICB3c1tpXS5ibG9ja2VyID0gb3RoZXJfbGl0OwogICAgICAgICAgICBpZiAodmFsdWVfbGl0KG90aGVyX2xpdCkgPT0gMSkgewogICAgICAgICAgICAgICAgKytpOwogICAgICAgICAgICAgICAgY29udGludWU7CiAgICAgICAgICAgIH0KCiAgICAgICAgICAgIGJvb2wgbW92ZWQgPSBmYWxzZTsKICAgICAgICAgICAgZm9yIChpbnQgayA9IDA7IGsgPCBzdGF0aWNfY2FzdDxpbnQ+KGMubGl0cy5zaXplKCkpOyArK2spIHsKICAgICAgICAgICAgICAgIGlmIChrID09IGMud2F0Y2gwIHx8IGsgPT0gYy53YXRjaDEpIGNvbnRpbnVlOwogICAgICAgICAgICAgICAgY29uc3QgaW50IGNhbmRpZGF0ZSA9IGMubGl0c1tzdGF0aWNfY2FzdDxzdGQ6OnNpemVfdD4oayldOwogICAgICAgICAgICAgICAgaWYgKHZhbHVlX2xpdChjYW5kaWRhdGUpICE9IDApIHsKICAgICAgICAgICAgICAgICAgICBpZiAoZmFsc2Vfc2xvdCA9PSBjLndhdGNoMCkgYy53YXRjaDAgPSBrOwogICAgICAgICAgICAgICAgICAgIGVsc2UgYy53YXRjaDEgPSBrOwogICAgICAgICAgICAgICAgICAgIHdzW2ldID0gd3MuYmFjaygpOwogICAgICAgICAgICAgICAgICAgIHdzLnBvcF9iYWNrKCk7CiAgICAgICAgICAgICAgICAgICAgd2F0Y2hlc19bc3RhdGljX2Nhc3Q8c3RkOjpzaXplX3Q+KGxpdF9pbmRleChjYW5kaWRhdGUpKV0ucHVzaF9iYWNrKFdhdGNoZXJ7Y2lkLCBvdGhlcl9saXR9KTsKICAgICAgICAgICAgICAgICAgICBtb3ZlZCA9IHRydWU7CiAgICAgICAgICAgICAgICAgICAgYnJlYWs7CiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0KICAgICAgICAgICAgaWYgKG1vdmVkKSBjb250aW51ZTsKCiAgICAgICAgICAgIGNvbnN0IGludCBvdGhlcl92YWx1ZSA9IHZhbHVlX2xpdChvdGhlcl9saXQpOwogICAgICAgICAgICBpZiAob3RoZXJfdmFsdWUgPT0gMCkgcmV0dXJuIGNpZDsKICAgICAgICAgICAgaWYgKCFlbnF1ZXVlKG90aGVyX2xpdCwgY2lkKSkgcmV0dXJuIGNpZDsKICAgICAgICAgICAgKytpOwogICAgICAgIH0KICAgICAgICBpZiAoKHN0YXRzXy5wcm9wYWdhdGlvbnMgJiAweDNGRkZVKSA9PSAwVSAmJiB0aW1lZF9vdXQoKSkgcmV0dXJuIC0yOwogICAgfQogICAgcmV0dXJuIC0xOwp9Cg=='
+          prop=base64.b64decode(enc).decode()
+          sp.write_text(s[:start]+prop+s[end:])
+          PY
+          for d in /tmp/base /tmp/candidate; do
+            cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$d/build" -j2
+            ctest --test-dir "$d/build" --output-on-failure
+          done
+      - name: Run certified BCP A/B
+        run: |
+          mkdir -p benchmarks/results/watch-blocker-ab-v2
+          for mode in base candidate; do
+            python3 tools/benchmark.py --manifest /tmp/bcp.json --root benchmarks/cache --satsolv "/tmp/${mode}/build/satsolv" --drat-trim /tmp/drat-trim-bin --time-limit 12 --verification-time-limit 180 --memory-gib 4 --output "benchmarks/results/watch-blocker-ab-v2/${mode}.json"
+          done
+      - name: Compare throughput
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          ds={m:json.loads(Path(f'benchmarks/results/watch-blocker-ab-v2/{m}.json').read_text()) for m in ('base','candidate')}
+          for m,d in ds.items():
+            if not d['certification']['passed']: raise SystemExit(f'{m} certification failed')
+          for m,d in ds.items():
+            conf=sum(int(r['solvers']['satsolv'].get('stats',{}).get('conflicts',0)) for r in d['rows']); prop=sum(int(r['solvers']['satsolv'].get('stats',{}).get('propagations',0)) for r in d['rows']); sec=sum(float(r['solvers']['satsolv'].get('stats',{}).get('solve_seconds',r['solvers']['satsolv']['elapsed'])) for r in d['rows']); s=d['summary']['satsolv']; print(f'{m}: solved={s["solved"]} par2={s["par2"]:.6f} conflicts_s={conf/max(sec,1e-9):.1f} propagations_s={prop/max(sec,1e-9):.1f}')
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: watch-blocker-ab-v2-evidence
+          path: benchmarks/results/watch-blocker-ab-v2/*.json
+          if-no-files-found: error
