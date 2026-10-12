@@ -1,0 +1,203 @@
+name: Watch Blocker A/B
+
+on:
+  push:
+    branches: ['r7/perf-watch-blocker-probe']
+    paths:
+      - .github/workflows/watch-blocker-ab.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+
+      - name: Select propagation-heavy diagnostic corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted = {
+              'stb_792_333.apx_1_DS-ST.cnf',
+              'brent_69_0.05.cnf',
+              '32_0.cnf',
+              'spg_420_280.cnf',
+              'SAT_dat.k10.cnf',
+              'rand_net70-40-10.shuffled.cnf',
+              'grs-32-160.cnf',
+              'sat-bench-trig-taylor4.cnf',
+              'minxor128.cnf',
+          }
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=len(wanted): raise SystemExit('diagnostic corpus incomplete')
+          Path('/tmp/bcp.json').write_text(json.dumps({'count':len(rows),'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch and hash-check inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/bcp.json --dest benchmarks/cache
+
+      - name: Materialize baseline and blocker candidate
+        run: |
+          git worktree add --detach /tmp/base "$GITHUB_SHA"
+          git worktree add --detach /tmp/candidate "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          hp=Path('/tmp/candidate/include/satsolv/solver.hpp')
+          h=hp.read_text()
+          h=h.replace(
+              '    struct HeapEntry {\n',
+              '    struct Watcher {\n        int clause = -1;\n        int blocker = 0;\n    };\n\n    struct HeapEntry {\n',
+              1)
+          old='    std::vector<std::vector<int>> watches_;'
+          new='    std::vector<std::vector<Watcher>> watches_;'
+          if old not in h: raise SystemExit('header watches anchor missing')
+          h=h.replace(old,new,1)
+          hp.write_text(h)
+
+          sp=Path('/tmp/candidate/src/solver.cpp')
+          s=sp.read_text()
+          old_add='''    watches_[static_cast<std::size_t>(lit_index(c.lits[0]))].push_back(cid);\n    watches_[static_cast<std::size_t>(lit_index(c.lits[1]))].push_back(cid);'''
+          new_add='''    watches_[static_cast<std::size_t>(lit_index(c.lits[0]))].push_back(Watcher{cid, c.lits[1]});\n    watches_[static_cast<std::size_t>(lit_index(c.lits[1]))].push_back(Watcher{cid, c.lits[0]});'''
+          if old_add not in s: raise SystemExit('add-clause watch anchor missing')
+          s=s.replace(old_add,new_add,1)
+
+          start=s.index('int Solver::propagate() {')
+          end=s.index('\nvoid Solver::cancel_until', start)
+          new_prop=r'''int Solver::propagate() {
+    while (qhead_ < trail_.size()) {
+        const int p = trail_[qhead_++];
+        ++stats_.propagations;
+        auto& ws = watches_[static_cast<std::size_t>(lit_index(-p))];
+        std::size_t i = 0;
+        while (i < ws.size()) {
+            if (value_lit(ws[i].blocker) == 1) {
+                ++i;
+                continue;
+            }
+
+            const int cid = ws[i].clause;
+            Clause& c = clauses_[static_cast<std::size_t>(cid)];
+            if (c.deleted) {
+                ws[i] = ws.back();
+                ws.pop_back();
+                continue;
+            }
+
+            int false_slot = -1;
+            int other_slot = -1;
+            if (c.lits[static_cast<std::size_t>(c.watch0)] == -p) {
+                false_slot = c.watch0;
+                other_slot = c.watch1;
+            } else if (c.lits[static_cast<std::size_t>(c.watch1)] == -p) {
+                false_slot = c.watch1;
+                other_slot = c.watch0;
+            } else {
+                ws[i] = ws.back();
+                ws.pop_back();
+                continue;
+            }
+
+            const int other_lit = c.lits[static_cast<std::size_t>(other_slot)];
+            ws[i].blocker = other_lit;
+            if (value_lit(other_lit) == 1) {
+                ++i;
+                continue;
+            }
+
+            bool moved = false;
+            for (int k = 0; k < static_cast<int>(c.lits.size()); ++k) {
+                if (k == c.watch0 || k == c.watch1) continue;
+                const int candidate = c.lits[static_cast<std::size_t>(k)];
+                if (value_lit(candidate) != 0) {
+                    if (false_slot == c.watch0) c.watch0 = k;
+                    else c.watch1 = k;
+                    ws[i] = ws.back();
+                    ws.pop_back();
+                    watches_[static_cast<std::size_t>(lit_index(candidate))].push_back(Watcher{cid, other_lit});
+                    moved = true;
+                    break;
+                }
+            }
+            if (moved) continue;
+
+            const int other_value = value_lit(other_lit);
+            if (other_value == 0) return cid;
+            if (!enqueue(other_lit, cid)) return cid;
+            ++i;
+        }
+        if ((stats_.propagations & 0x3FFFU) == 0U && timed_out()) return -2;
+    }
+    return -1;
+}
+'''
+          s=s[:start]+new_prop+s[end:]
+          sp.write_text(s)
+          PY
+          for d in /tmp/base /tmp/candidate; do
+            cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$d/build" -j2
+            ctest --test-dir "$d/build" --output-on-failure
+          done
+
+      - name: Run certified BCP A/B
+        run: |
+          mkdir -p benchmarks/results/watch-blocker-ab
+          for mode in base candidate; do
+            python3 tools/benchmark.py \
+              --manifest /tmp/bcp.json \
+              --root benchmarks/cache \
+              --satsolv "/tmp/${mode}/build/satsolv" \
+              --drat-trim /tmp/drat-trim-bin \
+              --time-limit 12 \
+              --verification-time-limit 180 \
+              --memory-gib 4 \
+              --output "benchmarks/results/watch-blocker-ab/${mode}.json"
+          done
+
+      - name: Compare throughput
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          ds={m:json.loads(Path(f'benchmarks/results/watch-blocker-ab/{m}.json').read_text()) for m in ('base','candidate')}
+          for m,d in ds.items():
+              if not d['certification']['passed']: raise SystemExit(f'{m} certification failed: {d["certification"]["violations"]}')
+          bm={r['instance']:r['solvers']['satsolv'] for r in ds['base']['rows']}
+          cm={r['instance']:r['solvers']['satsolv'] for r in ds['candidate']['rows']}
+          bc=cc=0; bt=ct=0.0; bp=cp=0
+          print('instance,base_result,candidate_result,base_conflicts_s,candidate_conflicts_s,base_propagations_s,candidate_propagations_s')
+          for n in sorted(bm):
+              b,c=bm[n],cm[n]
+              bs,cs=b.get('stats',{}),c.get('stats',{})
+              bsec=max(float(bs.get('solve_seconds',b['elapsed'])),1e-9); csec=max(float(cs.get('solve_seconds',c['elapsed'])),1e-9)
+              bconf=int(bs.get('conflicts',0)); cconf=int(cs.get('conflicts',0))
+              bprop=int(bs.get('propagations',0)); cprop=int(cs.get('propagations',0))
+              bc+=bconf; cc+=cconf; bp+=bprop; cp+=cprop; bt+=bsec; ct+=csec
+              print(f'{n},{b["result"]},{c["result"]},{bconf/bsec:.1f},{cconf/csec:.1f},{bprop/bsec:.1f},{cprop/csec:.1f}')
+          print(f'aggregate_conflicts_per_second base={bc/bt:.1f} candidate={cc/ct:.1f} ratio={(cc/ct)/(bc/bt):.4f}')
+          print(f'aggregate_propagations_per_second base={bp/bt:.1f} candidate={cp/ct:.1f} ratio={(cp/ct)/(bp/bt):.4f}')
+          print('summary base=',ds['base']['summary']['satsolv'])
+          print('summary candidate=',ds['candidate']['summary']['satsolv'])
+          PY
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: watch-blocker-ab-evidence
+          path: benchmarks/results/watch-blocker-ab/*.json
+          if-no-files-found: error
