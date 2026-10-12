@@ -1,0 +1,172 @@
+name: Search Control v2 A/B
+
+on:
+  push:
+    branches: ['exp/satsolv-v2-search-control']
+    paths: ['.github/workflows/search-control-v2-ab.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+
+      - name: Select diagnostic corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted = {
+              'clqcolor-08-06-07.shuffled-as.sat05-1257.cnf',
+              'rbsat-v760c43649gyes10.cnf',
+              'vmpc_28.shuffled-as.sat05-1957.cnf',
+              'or_randxor_k3_n520_m520.cnf',
+              'mchess16-mixed-35percent-blocked.cnf',
+              'posixpath__joinrealpath_13.cnf',
+              'rand_net70-40-10.shuffled.cnf',
+              'stb_792_333.apx_1_DS-ST.cnf',
+              'brent_69_0.05.cnf',
+              'SAT_dat.k10.cnf',
+          }
+          src = json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          rows = [x for x in src['instances'] if x['name'] in wanted]
+          if len(rows) != len(wanted):
+              missing = wanted - {x['name'] for x in rows}
+              raise SystemExit(f'diagnostic corpus incomplete: {sorted(missing)}')
+          Path('/tmp/search-control-v2.json').write_text(json.dumps({'count': len(rows), 'instances': rows}, indent=2) + '\n')
+          PY
+
+      - name: Fetch and hash-check inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/search-control-v2.json --dest benchmarks/cache
+
+      - name: Build Core v2 baseline and quality-gated candidate
+        run: |
+          git worktree add --detach /tmp/base b11f47060b99815620569e5fe2ad6b8071e5db01
+          git worktree add --detach /tmp/quality b11f47060b99815620569e5fe2ad6b8071e5db01
+          python3 - <<'PY'
+          from pathlib import Path
+
+          hp = Path('/tmp/quality/include/satsolv/solver.hpp')
+          h = hp.read_text()
+          anchor = '''    std::uint64_t next_restart_ = 100;'''
+          repl = '''    std::uint64_t next_restart_ = 100;\n\n    // Search Control v2: conservative fast/slow LBD signal. Luby remains\n    // the hard restart fallback; quality restarts can only happen earlier.\n    bool quality_initialized_ = false;\n    std::uint64_t quality_samples_ = 0;\n    double fast_lbd_ = 0.0;\n    double slow_lbd_ = 0.0;\n    double trail_ema_ = 0.0;\n    std::size_t last_conflict_trail_ = 0;'''
+          if anchor not in h: raise SystemExit('header restart anchor missing')
+          h = h.replace(anchor, repl, 1)
+          anchor = '''    void compact_clause_arena();'''
+          repl = '''    void compact_clause_arena();\n    void update_search_quality(int lbd);\n    bool should_quality_restart() const noexcept;'''
+          if anchor not in h: raise SystemExit('header method anchor missing')
+          hp.write_text(h.replace(anchor, repl, 1))
+
+          sp = Path('/tmp/quality/src/solver_v2.cpp')
+          s = sp.read_text()
+          anchor = '''    next_restart_ = static_cast<std::uint64_t>(config_.restart_base) * luby(restart_index_);'''
+          repl = '''    next_restart_ = static_cast<std::uint64_t>(config_.restart_base) * luby(restart_index_);\n    quality_initialized_ = false;\n    quality_samples_ = 0;\n    fast_lbd_ = 0.0;\n    slow_lbd_ = 0.0;\n    trail_ema_ = 0.0;\n    last_conflict_trail_ = 0;'''
+          if anchor not in s: raise SystemExit('reset restart anchor missing')
+          s = s.replace(anchor, repl, 1)
+
+          anchor = '''void Solver::write_binary_literal(std::ofstream& out, int lit, std::uint64_t& byte_counter) {'''
+          repl = '''void Solver::update_search_quality(int lbd) {\n    const double lbd_value = static_cast<double>(lbd);\n    const double trail_value = static_cast<double>(trail_.size());\n    last_conflict_trail_ = trail_.size();\n\n    if (!quality_initialized_) {\n        fast_lbd_ = lbd_value;\n        slow_lbd_ = lbd_value;\n        trail_ema_ = trail_value;\n        quality_initialized_ = true;\n        quality_samples_ = 1;\n        return;\n    }\n\n    // Fast ~= 16-conflict horizon, slow ~= 256-conflict horizon.\n    fast_lbd_ += (lbd_value - fast_lbd_) / 16.0;\n    slow_lbd_ += (lbd_value - slow_lbd_) / 256.0;\n    trail_ema_ += (trail_value - trail_ema_) / 64.0;\n    ++quality_samples_;\n}\n\nbool Solver::should_quality_restart() const noexcept {\n    // Prior 50-conflict LBD triggering was too aggressive. This controller\n    // needs a long warm-up and at least 200 conflicts in the current epoch.\n    if (!quality_initialized_ || quality_samples_ < 1024U || conflicts_since_restart_ < 200U) return false;\n    if (!(fast_lbd_ > 1.12 * slow_lbd_)) return false;\n\n    // Preserve unusually deep search rather than discarding a potentially\n    // productive trail just because short-horizon LBD temporarily worsened.\n    if (trail_ema_ > 0.0 && static_cast<double>(last_conflict_trail_) > 1.25 * trail_ema_) return false;\n    return true;\n}\n\nvoid Solver::write_binary_literal(std::ofstream& out, int lit, std::uint64_t& byte_counter) {'''
+          if anchor not in s: raise SystemExit('quality-method anchor missing')
+          s = s.replace(anchor, repl, 1)
+
+          anchor = '''                    const int lbd = compute_lbd(learnt);\n                    log_clause(learnt);'''
+          repl = '''                    const int lbd = compute_lbd(learnt);\n                    update_search_quality(lbd);\n                    log_clause(learnt);'''
+          if anchor not in s: raise SystemExit('LBD update anchor missing')
+          s = s.replace(anchor, repl, 1)
+
+          anchor = '''                    if (conflicts_since_restart_ >= next_restart_) {'''
+          repl = '''                    if (should_quality_restart() || conflicts_since_restart_ >= next_restart_) {'''
+          if anchor not in s: raise SystemExit('restart condition anchor missing')
+          sp.write_text(s.replace(anchor, repl, 1))
+          PY
+
+          for d in /tmp/base /tmp/quality; do
+            cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$d/build" -j2
+            ctest --test-dir "$d/build" --output-on-failure
+          done
+
+      - name: Run certified A/B
+        run: |
+          mkdir -p benchmarks/results/search-control-v2-ab
+          python3 tools/benchmark.py \
+            --manifest /tmp/search-control-v2.json \
+            --root benchmarks/cache \
+            --satsolv /tmp/base/build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 15 \
+            --verification-time-limit 180 \
+            --memory-gib 4 \
+            --output benchmarks/results/search-control-v2-ab/base.json
+          python3 tools/benchmark.py \
+            --manifest /tmp/search-control-v2.json \
+            --root benchmarks/cache \
+            --satsolv /tmp/quality/build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 15 \
+            --verification-time-limit 180 \
+            --memory-gib 4 \
+            --output benchmarks/results/search-control-v2-ab/quality.json
+
+      - name: Compare evidence
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          metrics = {}
+          docs = {}
+          for mode in ('base', 'quality'):
+              doc = json.loads(Path(f'benchmarks/results/search-control-v2-ab/{mode}.json').read_text())
+              docs[mode] = doc
+              cert = doc['certification']
+              if not cert['passed']:
+                  raise SystemExit(f'{mode} certification failed: {cert["violations"]}')
+              rows = doc['rows']
+              seconds = sum(float(r['solvers']['satsolv'].get('stats', {}).get('solve_seconds', r['solvers']['satsolv']['elapsed'])) for r in rows)
+              conflicts = sum(int(r['solvers']['satsolv'].get('stats', {}).get('conflicts', 0)) for r in rows)
+              propagations = sum(int(r['solvers']['satsolv'].get('stats', {}).get('propagations', 0)) for r in rows)
+              restarts = sum(int(r['solvers']['satsolv'].get('stats', {}).get('restarts', 0)) for r in rows)
+              summary = doc['summary']['satsolv']
+              metrics[mode] = {
+                  'solved': int(summary['solved']),
+                  'par2': float(summary['par2']),
+                  'seconds': seconds,
+                  'conflicts_per_second': conflicts / max(seconds, 1e-9),
+                  'propagations_per_second': propagations / max(seconds, 1e-9),
+                  'restarts': restarts,
+              }
+              print(mode, metrics[mode])
+          base = {r['instance']: r['solvers']['satsolv'] for r in docs['base']['rows']}
+          quality = {r['instance']: r['solvers']['satsolv'] for r in docs['quality']['rows']}
+          for name in sorted(base):
+              bs = base[name].get('stats', {})
+              qs = quality[name].get('stats', {})
+              print(name,
+                    'base', base[name]['result'], round(base[name]['elapsed'], 3), 'rest', bs.get('restarts'),
+                    'quality', quality[name]['result'], round(quality[name]['elapsed'], 3), 'rest', qs.get('restarts'))
+          if metrics['quality']['solved'] < metrics['base']['solved']:
+              raise SystemExit('quality controller solved-count regression')
+          if metrics['quality']['par2'] > metrics['base']['par2'] * 1.03:
+              raise SystemExit('quality controller PAR-2 regression exceeds 3% gate')
+          PY
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-control-v2-ab-evidence
+          path: benchmarks/results/search-control-v2-ab/*.json
+          if-no-files-found: error
