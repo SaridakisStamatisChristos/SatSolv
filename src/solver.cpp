@@ -423,11 +423,16 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
             for (int lit : clauses_[static_cast<std::size_t>(cid)].lits) {
                 const int v = var(lit);
                 activity_[static_cast<std::size_t>(v)] += 1.0;
-                ++heap_stamp_[static_cast<std::size_t>(v)];
-                order_heap_.push(HeapEntry{activity_[static_cast<std::size_t>(v)], v, heap_stamp_[static_cast<std::size_t>(v)]});
             }
         }
         if (root_unsat_) break;
+    }
+
+    // Loading-time activity is occurrence based. Rebuild once from final scores instead of
+    // retaining one stale priority-queue entry per literal occurrence.
+    order_heap_ = {};
+    for (int v = 1; v <= nvars_; ++v) {
+        order_heap_.push(HeapEntry{activity_[static_cast<std::size_t>(v)], v, heap_stamp_[static_cast<std::size_t>(v)]});
     }
 
     SolveOutput output;
