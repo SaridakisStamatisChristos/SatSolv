@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "description": "Committed correctness/benchmark smoke slice; not the SAT Competition acceptance slice.",
+  "instances": [
+    {"name":"sat_basic","path":"tests/cnf/sat_basic.cnf","expected":"SAT"},
+    {"name":"unsat_basic","path":"tests/cnf/unsat_basic.cnf","expected":"UNSAT"},
+    {"name":"unsat_units","path":"tests/cnf/unsat_units.cnf","expected":"UNSAT"},
+    {"name":"empty_clause","path":"tests/cnf/empty_clause.cnf","expected":"UNSAT"},
+    {"name":"empty_formula","path":"tests/cnf/empty_formula.cnf","expected":"SAT"}
+  ]
+}

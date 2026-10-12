@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'r7/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build -j2
+      - name: Native unit tests
+        run: ctest --test-dir build --output-on-failure
+      - name: Exhaustive and randomized correctness
+        run: python3 tools/exhaustive_check.py build/satsolv --random 500
+      - name: Metamorphic properties
+        run: python3 tools/metamorphic_check.py build/satsolv --cases 300
+      - name: Malformed DIMACS adversarial cases
+        run: python3 tools/parser_adversarial.py build/satsolv
+      - name: Python tool syntax
+        run: python3 -m py_compile tools/*.py
+      - name: Fail-closed benchmark certification regression
+        run: python3 tools/benchmark_fail_closed_check.py
+      - name: Fail-closed benchmark internal-error regression
+        run: python3 tools/benchmark_internal_error_check.py
+      - name: SAT witness independent validation
+        shell: bash
+        run: |
+          set +e
+          build/satsolv tests/cnf/sat_basic.cnf > sat.out
+          rc=$?
+          set -e
+          test "$rc" -eq 10
+          python3 tools/check_model.py tests/cnf/sat_basic.cnf sat.out
+      - name: Build pinned drat-trim
+        shell: bash
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: External UNSAT DRAT certification
+        shell: bash
+        run: |
+          set +e
+          build/satsolv tests/cnf/unsat_basic.cnf --proof unsat_basic.drat
+          rc1=$?
+          build/satsolv tests/cnf/unsat_units.cnf --proof unsat_units.drat
+          rc2=$?
+          build/satsolv tests/cnf/empty_clause.cnf --proof empty_clause.drat
+          rc3=$?
+          set -e
+          test "$rc1" -eq 20 && test "$rc2" -eq 20 && test "$rc3" -eq 20
+          bash tools/verify_drat.sh /tmp/drat-trim-bin tests/cnf/unsat_basic.cnf unsat_basic.drat
+          bash tools/verify_drat.sh /tmp/drat-trim-bin tests/cnf/unsat_units.cnf unsat_units.drat
+          bash tools/verify_drat.sh /tmp/drat-trim-bin tests/cnf/empty_clause.cnf empty_clause.drat
+      - name: Certified benchmark harness smoke
+        run: |
+          python3 tools/benchmark.py \
+            --manifest benchmarks/smoke_manifest.json \
+            --root . \
+            --satsolv build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 5 \
+            --memory-gib 4 \
+            --output benchmarks/results/ci-smoke.json
+          python3 tools/report_benchmark.py benchmarks/results/ci-smoke.json benchmarks/results/ci-smoke.md
+      - name: Preserve certification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: certification-artifacts
+          path: |
+            *.drat
+            sat.out
+            benchmarks/results/ci-smoke.json
+            benchmarks/results/ci-smoke.md
+          if-no-files-found: ignore
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure ASan + UBSan
+        run: cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DSATSOLV_ENABLE_SANITIZERS=ON
+      - name: Build sanitizer binary
+        run: cmake --build build-asan -j2
+      - name: Unit tests under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build-asan --output-on-failure
+      - name: Randomized checks under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: python3 tools/exhaustive_check.py build-asan/satsolv --random 100
+
+  differential:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build SatSolv
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2
+      - name: Build pinned MiniSat 2.2.0
+        shell: bash
+        run: |
+          git clone https://github.com/niklasso/minisat.git /tmp/minisat
+          git -C /tmp/minisat checkout eb01ad68b75bb3b34ff8657c37ad6a31faae0fc3
+          export MROOT=/tmp/minisat
+          make -C /tmp/minisat/simp -j2 r CXX="g++ -fpermissive"
+          cp /tmp/minisat/simp/minisat_release /tmp/minisat-bin
+      - name: Build pinned Kissat 4.0.2
+        shell: bash
+        run: |
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout f7e57764c19cf35198830575492dc9d80e872b55
+          cd /tmp/kissat
+          ./configure
+          make -j2
+          cp build/kissat /tmp/kissat-bin
+      - name: Differential logical-result campaign
+        run: python3 tools/differential_check.py --satsolv build/satsolv --minisat /tmp/minisat-bin --kissat /tmp/kissat-bin --cases 200

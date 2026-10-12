@@ -1,0 +1,52 @@
+name: Resolve Competition Manifest
+
+on:
+  push:
+    branches: ['r7/**']
+    paths:
+      - benchmarks/competition_candidates.json
+      - tools/resolve_competition_manifest.py
+      - .github/workflows/resolve-benchmarks.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve official URLs and SHA-256 hashes
+        run: |
+          python3 tools/resolve_competition_manifest.py \
+            --candidates benchmarks/competition_candidates.json \
+            --output benchmarks/competition_manifest.json
+      - name: Validate manifest shape
+        run: |
+          python3 - <<'PY'
+          import json
+          p='benchmarks/competition_manifest.json'
+          d=json.load(open(p))
+          assert d['count']==30 and d['sat_count']==15 and d['unsat_count']==15
+          assert len({x['sha256'] for x in d['instances']})==30
+          assert all(len(x['sha256'])==64 and len(x['source_sha256'])==64 for x in d['instances'])
+          print('PASS: resolved 30 unique SHA-256-pinned instances (15 SAT / 15 UNSAT)')
+          PY
+      - name: Commit exact resolved manifest
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmarks/competition_manifest.json
+          if git diff --cached --quiet; then
+            echo 'Manifest already committed; no repository update required.'
+          else
+            git commit -m 'bench: pin resolved SAT Competition manifest'
+            git push origin HEAD:r7/zero-to-hero
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resolved-competition-manifest
+          path: benchmarks/competition_manifest.json

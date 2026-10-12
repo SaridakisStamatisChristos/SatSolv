@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "source": "SAT Competition 2023 Main Track via Global Benchmark Database",
+  "selection_rule": "Frozen 30-instance engineering acceptance slice: 15 SAT and 15 UNSAT, selected before measurement for structural-family diversity and a mixture of minisat1m yes/no cases. Unknown-result instances excluded.",
+  "instances": [
+    {"gbd_hash":"00a981f385cd209d41e1efa1f5f29bac","filename":"ibm-2004-03-k70.cnf.xz","expected":"SAT","family":"hardware-verification","minisat1m":"yes"},
+    {"gbd_hash":"00b46ace235e3915a439c77a231a5657","filename":"TableSymModel_output_7_3_9.bul_.dimacs.cnf.xz","expected":"SAT","family":"social-golfer","minisat1m":"no"},
+    {"gbd_hash":"00bb0b4ef28ed38c49de4c54b9fabc4d","filename":"25_2.cnf.xz","expected":"SAT","family":"cryptography-simon","minisat1m":"no"},
+    {"gbd_hash":"00f4aca773e5675f35263dcd46b15bde","filename":"vmpc_28.shuffled-as.sat05-1957.cnf.xz","expected":"SAT","family":"cryptography","minisat1m":"no"},
+    {"gbd_hash":"0c9da400944b002f90fd385d4fdab385","filename":"DivS_568_11.cnf.sanitized.cnf.xz","expected":"SAT","family":"subsumptiontest","minisat1m":"no"},
+    {"gbd_hash":"751402d0738e5622b599c651283cb48a","filename":"SCPC-800-43.cnf.xz","expected":"SAT","family":"set-covering","minisat1m":"no"},
+    {"gbd_hash":"909f704d5f4127c1197a086705468624","filename":"rbsat-v760c43649gyes10.cnf.xz","expected":"SAT","family":"rbsat","minisat1m":"yes"},
+    {"gbd_hash":"911cbc796d15eb316d36c82c90fd7d11","filename":"c499_gr_2pin_w6.shuffled.cnf.xz","expected":"SAT","family":"fpga-routing","minisat1m":"yes"},
+    {"gbd_hash":"92c17c00d862668de6e6c45d4eecdc75","filename":"combined-crypto1-wff-seed-101-wffvars-500-cryptocplx-31-overlap-2.cnf.xz","expected":"SAT","family":"cryptography","minisat1m":"no"},
+    {"gbd_hash":"93a87994c03a7752f85d863239555d48","filename":"PRP_30_35.cnf.xz","expected":"SAT","family":"profitable-robust-production","minisat1m":"no"},
+    {"gbd_hash":"945d67baeb7860df648ab6ef4782d5ed","filename":"stb_792_333.apx_1_DS-ST.cnf.xz","expected":"SAT","family":"argumentation","minisat1m":"no"},
+    {"gbd_hash":"578f9377bfbfcc6ea3a18eb630667956","filename":"ferry8_ks99i.renamed-as.sat05-4005.cnf.xz","expected":"SAT","family":"planning","minisat1m":"yes"},
+    {"gbd_hash":"587150fb7b12a6b5dd7e4a9446b9713b","filename":"iso-ukn004.shuffled-as.sat05-3385.cnf.xz","expected":"SAT","family":"quasigroup-completion","minisat1m":"yes"},
+    {"gbd_hash":"4fd2e4e6ecb4fe8d3f9e1fda81633469","filename":"brent_69_0.05.cnf.xz","expected":"SAT","family":"brent-equations","minisat1m":"no"},
+    {"gbd_hash":"4fe42891b004d7425631a8edb4252d3f","filename":"32_0.cnf.xz","expected":"SAT","family":"cryptography-simon","minisat1m":"no"},
+
+    {"gbd_hash":"004b0f451f7d96f6a572e9e76360f51a","filename":"spg_420_280.cnf.xz","expected":"UNSAT","family":"cellular-automata","minisat1m":"no"},
+    {"gbd_hash":"008e7716c69009090ff6bd0048dc55f8","filename":"SAT_dat.k10.cnf.xz","expected":"UNSAT","family":"hardware-verification","minisat1m":"no"},
+    {"gbd_hash":"00f2eb377986e7decbc863931680a3b2","filename":"rand_net70-40-10.shuffled.cnf.xz","expected":"UNSAT","family":"miter","minisat1m":"yes"},
+    {"gbd_hash":"0d3e99a07b6a6b67ac59d706c0af9d68","filename":"grs-32-160.cnf.xz","expected":"UNSAT","family":"grs-fp-comm","minisat1m":"no"},
+    {"gbd_hash":"0eb98926b26343d31954169dfbde2b24","filename":"satcoin-genesis-UNSAT-11900.cnf.xz","expected":"UNSAT","family":"satcoin","minisat1m":"no"},
+    {"gbd_hash":"0ef0d91d378eab41ba6fb9dfc9b87fc8","filename":"sat-bench-trig-taylor4.cnf.xz","expected":"UNSAT","family":"trigonometric-functions","minisat1m":"no"},
+    {"gbd_hash":"112b0ac22b2a567cd3badfed3a5497fd","filename":"mchess16-mixed-35percent-blocked.cnf.xz","expected":"UNSAT","family":"mutilated-chessboard","minisat1m":"no"},
+    {"gbd_hash":"1153a473e1d5dd21ccd33189d594a4aa","filename":"tseitin_d3_n10000.cnf.xz","expected":"UNSAT","family":"tseitin-formulas","minisat1m":"no"},
+    {"gbd_hash":"11db226d109e82f93aaa3b2604173ff9","filename":"posixpath__joinrealpath_13.cnf.xz","expected":"UNSAT","family":"register-allocation","minisat1m":"no"},
+    {"gbd_hash":"4f38f4b005cc54122135c8c21aec4b85","filename":"intervals7.cnf.xz","expected":"UNSAT","family":"interval-matching","minisat1m":"no"},
+    {"gbd_hash":"4fdcf4248a332c1c9a89d37439c879a9","filename":"or_randxor_k3_n520_m520.cnf.xz","expected":"UNSAT","family":"or_randxor","minisat1m":"no"},
+    {"gbd_hash":"54ab5a53d2fdfcda16ec74768b29f901","filename":"rphp_p30_r30.cnf.xz","expected":"UNSAT","family":"relativized-pigeon-hole","minisat1m":"no"},
+    {"gbd_hash":"558113ad4d50130351db8c426230a50f","filename":"asconhashv12_opt64_H9_M2-wNfQskE8G_m1_6_U0.c.cnf.xz","expected":"UNSAT","family":"cryptography-ascon","minisat1m":"no"},
+    {"gbd_hash":"8cf6b81061285343c4f33c51afdb3fbb","filename":"minxor128.cnf.xz","expected":"UNSAT","family":"bitvector","minisat1m":"no"},
+    {"gbd_hash":"571a2f223784fb92a53b4cc8cc8b569e","filename":"clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.xz","expected":"UNSAT","family":"coloring","minisat1m":"yes"}
+  ]
+}

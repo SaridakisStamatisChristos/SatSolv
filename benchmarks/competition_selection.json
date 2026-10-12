@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "status": "selection-source-pinned; resolved hashes must be produced by acquisition before acceptance",
+  "track": "SAT Competition 2023 Main Track",
+  "official_link_source": "https://benchmark-database.de/getinstances?track=main_2023",
+  "selection_rule": "deterministically select 40 entries after sorting official URI list by URL; stratification must then be frozen with SHA-256 in competition_manifest.json before acceptance",
+  "target_count": 40,
+  "resource_limit_seconds": 60,
+  "memory_gib": 4,
+  "note": "This file is not acceptance evidence. R7 completion requires a resolved competition_manifest.json with exact names, source URLs, expected status where known, and SHA-256 hashes, plus raw executed results."
+}
