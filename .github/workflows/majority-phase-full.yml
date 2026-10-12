@@ -1,0 +1,72 @@
+name: Majority Phase Full Qualification
+
+on:
+  push:
+    branches: ['r7/search-majority-phase-ab']
+    paths: ['.github/workflows/majority-phase-full.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build majority-phase candidate
+        run: |
+          git worktree add --detach /tmp/candidate "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/candidate/src/solver.cpp'); s=p.read_text()
+          anchor='''    start_time_ = std::chrono::steady_clock::now();\n\n    for (const auto& clause : formula.clauses) {'''
+          repl='''    start_time_ = std::chrono::steady_clock::now();\n\n    std::vector<int> polarity_score(static_cast<std::size_t>(nvars_ + 1), 0);\n    for (const auto& clause : formula.clauses) {\n        for (int lit : clause) polarity_score[static_cast<std::size_t>(var(lit))] += lit > 0 ? 1 : -1;\n    }\n    for (int v = 1; v <= nvars_; ++v) saved_phase_[static_cast<std::size_t>(v)] = static_cast<std::int8_t>(polarity_score[static_cast<std::size_t>(v)] >= 0 ? 1 : 0);\n\n    for (const auto& clause : formula.clauses) {'''
+          if anchor not in s: raise SystemExit('phase anchor missing')
+          p.write_text(s.replace(anchor,repl,1))
+          PY
+          cmake -S /tmp/candidate -B /tmp/candidate/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/candidate/build -j2
+          ctest --test-dir /tmp/candidate/build --output-on-failure
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Fetch and hash-check full corpus
+        run: python3 tools/fetch_benchmarks.py --manifest benchmarks/competition_manifest.json --dest benchmarks/cache
+      - name: Run full certified candidate
+        run: |
+          python3 tools/benchmark.py \
+            --manifest benchmarks/competition_manifest.json \
+            --root benchmarks/cache \
+            --satsolv /tmp/candidate/build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 60 \
+            --verification-time-limit 300 \
+            --memory-gib 4 \
+            --output benchmarks/results/majority-phase-full.json
+      - name: Enforce qualification gate
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('benchmarks/results/majority-phase-full.json').read_text())
+          print(json.dumps(d['summary']['satsolv'],indent=2,sort_keys=True))
+          if not d['certification']['passed']:
+              raise SystemExit(f'certification failed: {d["certification"]["violations"]}')
+          s=d['summary']['satsolv']
+          if s['crashes'] or s['solver_errors'] or s['verification_failures']:
+              raise SystemExit('runtime/certification regression')
+          if s['solved'] < 8:
+              raise SystemExit(f'coverage regression: solved={s["solved"]} < majority retain+gain target 8')
+          PY
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: majority-phase-full-evidence
+          path: benchmarks/results/majority-phase-full.json
+          if-no-files-found: error
