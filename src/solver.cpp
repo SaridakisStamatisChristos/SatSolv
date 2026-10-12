@@ -425,6 +425,19 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     }
     start_time_ = std::chrono::steady_clock::now();
 
+    // Seed only the initial decision polarity from the formula. Phase saving takes over
+    // immediately after assignments begin, so this is a deterministic startup hint only.
+    std::vector<int> polarity_score(static_cast<std::size_t>(nvars_ + 1), 0);
+    for (const auto& clause : formula.clauses) {
+        for (int lit : clause) {
+            polarity_score[static_cast<std::size_t>(var(lit))] += lit > 0 ? 1 : -1;
+        }
+    }
+    for (int v = 1; v <= nvars_; ++v) {
+        saved_phase_[static_cast<std::size_t>(v)] =
+            static_cast<std::int8_t>(polarity_score[static_cast<std::size_t>(v)] >= 0 ? 1 : 0);
+    }
+
     for (const auto& clause : formula.clauses) {
         const int cid = add_clause(clause, false);
         if (cid >= 0) {
