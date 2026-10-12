@@ -48,6 +48,11 @@ public:
     SolveOutput solve(const Formula& formula, const std::optional<std::filesystem::path>& proof_path = std::nullopt);
 
 private:
+    enum class ClauseTier : std::uint8_t { Original, Core, Tier2, Local };
+
+    static constexpr int kCoreLbd = 2;
+    static constexpr int kTier2Lbd = 4;
+
     struct Clause {
         std::size_t offset = 0;
         std::uint32_t size = 0;
@@ -57,6 +62,9 @@ private:
         bool deleted = false;
         int lbd = 0;
         double activity = 0.0;
+        ClauseTier tier = ClauseTier::Original;
+        std::uint64_t created_conflict = 0;
+        std::uint64_t last_touched_conflict = 0;
     };
 
     struct Watcher {
@@ -119,6 +127,7 @@ private:
     std::uint64_t next_restart_ = 100;
 
     static int var(int lit) noexcept { return lit < 0 ? -lit : lit; }
+    static ClauseTier classify_tier(int lbd) noexcept;
     int lit_index(int lit) const noexcept;
     int value_lit(int lit) const noexcept;
     int decision_level() const noexcept { return static_cast<int>(trail_lim_.size()); }
@@ -137,6 +146,8 @@ private:
     void rescale_activities();
     void analyze(int conflict_clause, std::vector<int>& learnt, int& backtrack);
     int compute_lbd(const std::vector<int>& clause);
+    int compute_lbd(const Clause& clause);
+    void refresh_clause_quality(int cid);
     void minimize_clause(std::vector<int>& clause);
     void reduce_database();
     bool clause_locked(int cid) const noexcept;
