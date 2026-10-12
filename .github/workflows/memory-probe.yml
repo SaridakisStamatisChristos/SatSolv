@@ -1,0 +1,77 @@
+name: Memory Probe Matrix
+
+on:
+  push:
+    branches: ['r7/perf-memory-reclaim']
+    paths:
+      - .github/workflows/memory-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        instance:
+          - SAT_dat.k10.cnf
+          - grs-32-160.cnf
+          - satcoin-genesis-UNSAT-11900.cnf
+          - intervals7.cnf
+          - asconhashv12_opt64_H9_M2-wNfQskE8G_m1_6_U0.c.cnf
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build SatSolv
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select one regression instance
+        env:
+          INSTANCE: ${{ matrix.instance }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          src = json.loads(Path('benchmarks/memory_regression_manifest.json').read_text())
+          item = next(x for x in src['instances'] if x['name'] == os.environ['INSTANCE'])
+          Path('/tmp/one.json').write_text(json.dumps({'count': 1, 'instances': [item]}, indent=2) + '\n')
+          PY
+      - name: Fetch and hash-check input
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/one.json --dest benchmarks/cache
+      - name: Run under 4 GiB
+        run: |
+          python3 tools/benchmark.py \
+            --manifest /tmp/one.json \
+            --root benchmarks/cache \
+            --satsolv build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 60 \
+            --verification-time-limit 300 \
+            --memory-gib 4 \
+            --output benchmarks/results/probe.json
+      - name: Assert no internal memory failure
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('benchmarks/results/probe.json').read_text())
+          r = data['rows'][0]['solvers']['satsolv']
+          stderr = r.get('stderr', '')
+          if r.get('crashed') or r.get('exit_code') not in (0, 10, 20) or 'bad_alloc' in stderr:
+              raise SystemExit(json.dumps({'exit_code': r.get('exit_code'), 'crashed': r.get('crashed'), 'stderr': stderr[-1000:]}, sort_keys=True))
+          print(json.dumps({'result': r.get('result'), 'elapsed': r.get('elapsed'), 'exit_code': r.get('exit_code'), 'proof_bytes': r.get('proof_bytes')}, sort_keys=True))
+          PY
+      - name: Upload probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-probe-${{ strategy.job-index }}
+          path: benchmarks/results/probe.json
+          if-no-files-found: warn
