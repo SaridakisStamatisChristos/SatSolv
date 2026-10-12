@@ -1,0 +1,125 @@
+name: Clause DB v2 A/B
+
+on:
+  push:
+    branches: ['fit/satsolv-v2-clause-db']
+    paths:
+      - src/**
+      - include/**
+      - CMakeLists.txt
+      - .github/workflows/clause-db-v2-ab.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select diagnostic corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted = {
+              'clqcolor-08-06-07.shuffled-as.sat05-1257.cnf',
+              'rbsat-v760c43649gyes10.cnf',
+              'vmpc_28.shuffled-as.sat05-1957.cnf',
+              'or_randxor_k3_n520_m520.cnf',
+              'mchess16-mixed-35percent-blocked.cnf',
+              'posixpath__joinrealpath_13.cnf',
+              'rand_net70-40-10.shuffled.cnf',
+              'stb_792_333.apx_1_DS-ST.cnf',
+              'brent_69_0.05.cnf',
+              'SAT_dat.k10.cnf',
+          }
+          src = json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          rows = [x for x in src['instances'] if x['name'] in wanted]
+          if len(rows) != len(wanted):
+              missing = wanted - {x['name'] for x in rows}
+              raise SystemExit(f'diagnostic corpus incomplete: {sorted(missing)}')
+          Path('/tmp/clause-db-v2.json').write_text(json.dumps({'count': len(rows), 'instances': rows}, indent=2) + '\n')
+          PY
+      - name: Fetch and hash-check inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/clause-db-v2.json --dest benchmarks/cache
+      - name: Build Core v2 baseline and Clause DB v2 candidate
+        run: |
+          git worktree add --detach /tmp/base b11f47060b99815620569e5fe2ad6b8071e5db01
+          git worktree add --detach /tmp/candidate "$GITHUB_SHA"
+          for d in /tmp/base /tmp/candidate; do
+            cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$d/build" -j2
+            ctest --test-dir "$d/build" --output-on-failure
+          done
+      - name: Run certified A/B
+        run: |
+          mkdir -p benchmarks/results/clause-db-v2-ab
+          python3 tools/benchmark.py \
+            --manifest /tmp/clause-db-v2.json \
+            --root benchmarks/cache \
+            --satsolv /tmp/base/build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 15 \
+            --verification-time-limit 180 \
+            --memory-gib 4 \
+            --output benchmarks/results/clause-db-v2-ab/base.json
+          python3 tools/benchmark.py \
+            --manifest /tmp/clause-db-v2.json \
+            --root benchmarks/cache \
+            --satsolv /tmp/candidate/build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 15 \
+            --verification-time-limit 180 \
+            --memory-gib 4 \
+            --output benchmarks/results/clause-db-v2-ab/candidate.json
+      - name: Compare evidence
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = {m: json.loads(Path(f'benchmarks/results/clause-db-v2-ab/{m}.json').read_text()) for m in ('base', 'candidate')}
+          metrics = {}
+          for mode, doc in data.items():
+              cert = doc['certification']
+              if not cert['passed']:
+                  raise SystemExit(f'{mode} certification failed: {cert["violations"]}')
+              rows = doc['rows']
+              conflicts = sum(int(r['solvers']['satsolv'].get('stats', {}).get('conflicts', 0)) for r in rows)
+              propagations = sum(int(r['solvers']['satsolv'].get('stats', {}).get('propagations', 0)) for r in rows)
+              seconds = sum(float(r['solvers']['satsolv'].get('stats', {}).get('solve_seconds', r['solvers']['satsolv']['elapsed'])) for r in rows)
+              proof_bytes = sum(int(r['solvers']['satsolv'].get('proof_bytes', 0)) for r in rows)
+              summary = doc['summary']['satsolv']
+              metrics[mode] = {
+                  'solved': int(summary['solved']),
+                  'par2': float(summary['par2']),
+                  'conflicts_per_second': conflicts / max(seconds, 1e-9),
+                  'propagations_per_second': propagations / max(seconds, 1e-9),
+                  'proof_bytes': proof_bytes,
+              }
+              print(mode, metrics[mode])
+          base = {r['instance']: r['solvers']['satsolv'] for r in data['base']['rows']}
+          cand = {r['instance']: r['solvers']['satsolv'] for r in data['candidate']['rows']}
+          for name in sorted(base):
+              print(name, 'base', base[name]['result'], round(base[name]['elapsed'], 3), 'candidate', cand[name]['result'], round(cand[name]['elapsed'], 3))
+          if metrics['candidate']['solved'] < metrics['base']['solved']:
+              raise SystemExit('candidate solved-count regression')
+          if metrics['candidate']['par2'] > metrics['base']['par2'] * 1.03:
+              raise SystemExit('candidate PAR-2 regression exceeds 3% gate')
+          PY
+      - name: Upload A/B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clause-db-v2-ab-evidence
+          path: benchmarks/results/clause-db-v2-ab/*.json
+          if-no-files-found: error
