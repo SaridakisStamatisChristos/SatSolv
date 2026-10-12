@@ -39,7 +39,7 @@ jobs:
           wanted = {
               'or_randxor_k3_n520_m520.cnf',
               'mchess16-mixed-35percent-blocked.cnf',
-              'nonogram156.shuffled-as.sat03-430.cnf',
+              'posixpath__joinrealpath_13.cnf',
               'clqcolor-08-06-07.shuffled-as.sat05-1257.cnf',
           }
           source = json.loads(Path('benchmarks/competition_manifest.json').read_text())
