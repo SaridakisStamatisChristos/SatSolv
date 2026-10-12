@@ -25,6 +25,12 @@ std::string result_name(SolveResult result) {
     return "UNKNOWN";
 }
 
+Solver::ClauseTier Solver::classify_tier(int lbd) noexcept {
+    if (lbd <= kCoreLbd) return ClauseTier::Core;
+    if (lbd <= kTier2Lbd) return ClauseTier::Tier2;
+    return ClauseTier::Local;
+}
+
 int Solver::lit_index(int lit) const noexcept {
     const int v = var(lit) - 1;
     return 2 * v + (lit < 0 ? 1 : 0);
@@ -128,6 +134,9 @@ int Solver::add_clause(const std::vector<int>& input, bool learnt, int lbd) {
     clause.scan_cursor = 2;
     clause.learnt = learnt;
     clause.lbd = lbd;
+    clause.tier = learnt ? classify_tier(lbd) : ClauseTier::Original;
+    clause.created_conflict = stats_.conflicts;
+    clause.last_touched_conflict = stats_.conflicts;
     literal_arena_.insert(literal_arena_.end(), source->begin(), source->end());
     clauses_.push_back(clause);
 
@@ -348,6 +357,37 @@ int Solver::compute_lbd(const std::vector<int>& clause) {
     return distinct;
 }
 
+int Solver::compute_lbd(const Clause& clause) {
+    ++level_epoch_;
+    if (level_epoch_ == 0) {
+        std::fill(level_marks_.begin(), level_marks_.end(), 0);
+        level_epoch_ = 1;
+    }
+
+    int distinct = 0;
+    for (std::size_t i = 0; i < static_cast<std::size_t>(clause.size); ++i) {
+        const int lit = clause_lit(clause, i);
+        const int level = levels_[static_cast<std::size_t>(var(lit))];
+        const std::size_t index = static_cast<std::size_t>(level);
+        if (level_marks_[index] == level_epoch_) continue;
+        level_marks_[index] = level_epoch_;
+        ++distinct;
+    }
+    return distinct;
+}
+
+void Solver::refresh_clause_quality(int cid) {
+    Clause& clause = clauses_[static_cast<std::size_t>(cid)];
+    if (!clause.learnt || clause.deleted) return;
+
+    clause.last_touched_conflict = stats_.conflicts;
+    if (clause.lbd > kCoreLbd) {
+        const int current_lbd = compute_lbd(clause);
+        if (current_lbd < clause.lbd) clause.lbd = current_lbd;
+    }
+    clause.tier = classify_tier(clause.lbd);
+}
+
 void Solver::minimize_clause(std::vector<int>& clause) {
     if (clause.size() <= 2) return;
 
@@ -412,6 +452,7 @@ void Solver::analyze(int conflict_clause, std::vector<int>& learnt, int& backtra
         Clause& c = clauses_[static_cast<std::size_t>(cid)];
         if (c.deleted) throw std::logic_error("conflict analysis reached deleted clause");
         c.activity += 1.0;
+        refresh_clause_quality(cid);
 
         for (std::size_t i = 0; i < static_cast<std::size_t>(c.size); ++i) {
             const int q = clause_lit(c, i);
@@ -484,29 +525,54 @@ void Solver::compact_clause_arena() {
 }
 
 void Solver::reduce_database() {
-    std::vector<int> candidates;
+    std::vector<int> local_candidates;
+    std::vector<int> tier2_candidates;
+    const std::uint64_t interval = static_cast<std::uint64_t>(std::max(config_.reduce_interval, 1));
+    const std::uint64_t now = stats_.conflicts;
+    const std::uint64_t local_grace = 2U * interval;
+    const std::uint64_t local_idle = interval;
+    const std::uint64_t tier2_grace = 4U * interval;
+    const std::uint64_t tier2_idle = 2U * interval;
+
     for (int cid = 0; cid < static_cast<int>(clauses_.size()); ++cid) {
         const Clause& c = clauses_[static_cast<std::size_t>(cid)];
-        if (!c.learnt || c.deleted || c.size <= 2 || c.lbd <= 2 || clause_locked(cid)) continue;
-        candidates.push_back(cid);
+        if (!c.learnt || c.deleted || c.size <= 2 || clause_locked(cid)) continue;
+        if (c.tier == ClauseTier::Core) continue;
+
+        const std::uint64_t age = now - c.created_conflict;
+        const std::uint64_t idle = now - c.last_touched_conflict;
+        if (c.tier == ClauseTier::Tier2) {
+            if (age >= tier2_grace && idle >= tier2_idle) tier2_candidates.push_back(cid);
+        } else if (c.tier == ClauseTier::Local) {
+            if (age >= local_grace && idle >= local_idle) local_candidates.push_back(cid);
+        }
     }
 
-    std::sort(candidates.begin(), candidates.end(), [this](int a, int b) {
+    auto worse_clause = [this](int a, int b) {
         const Clause& ca = clauses_[static_cast<std::size_t>(a)];
         const Clause& cb = clauses_[static_cast<std::size_t>(b)];
         if (ca.lbd != cb.lbd) return ca.lbd > cb.lbd;
+        if (ca.last_touched_conflict != cb.last_touched_conflict) {
+            return ca.last_touched_conflict < cb.last_touched_conflict;
+        }
         if (ca.activity != cb.activity) return ca.activity < cb.activity;
         return ca.size > cb.size;
-    });
+    };
+    std::sort(local_candidates.begin(), local_candidates.end(), worse_clause);
+    std::sort(tier2_candidates.begin(), tier2_candidates.end(), worse_clause);
 
-    const std::size_t remove_count = candidates.size() / 2;
-    for (std::size_t i = 0; i < remove_count; ++i) {
-        Clause& c = clauses_[static_cast<std::size_t>(candidates[i])];
-        if (c.reason_refs != 0) continue;
-        c.deleted = true;
-        dead_literals_ += static_cast<std::size_t>(c.size);
-        ++stats_.deleted_learnt_clauses;
-    }
+    auto delete_prefix = [this](const std::vector<int>& candidates, std::size_t count) {
+        for (std::size_t i = 0; i < count; ++i) {
+            Clause& c = clauses_[static_cast<std::size_t>(candidates[i])];
+            if (c.reason_refs != 0 || c.deleted) continue;
+            c.deleted = true;
+            dead_literals_ += static_cast<std::size_t>(c.size);
+            ++stats_.deleted_learnt_clauses;
+        }
+    };
+
+    delete_prefix(local_candidates, local_candidates.size() / 2);
+    delete_prefix(tier2_candidates, tier2_candidates.size() / 4);
 
     const std::size_t compact_floor = 4096;
     if (dead_literals_ >= compact_floor && dead_literals_ >= literal_arena_.size() / 4) {
