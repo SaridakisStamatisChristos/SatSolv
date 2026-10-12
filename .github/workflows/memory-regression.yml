@@ -1,0 +1,71 @@
+name: Memory Regression
+
+on:
+  push:
+    branches: ['r7/perf-memory-reclaim']
+    paths:
+      - src/**
+      - include/**
+      - benchmarks/memory_regression_manifest.json
+      - tools/benchmark.py
+      - tools/fetch_benchmarks.py
+      - .github/workflows/memory-regression.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  memory-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build SatSolv
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Fetch and hash-check regression inputs
+        run: python3 tools/fetch_benchmarks.py --manifest benchmarks/memory_regression_manifest.json --dest benchmarks/cache
+      - name: Run former bad_alloc cases under 4 GiB
+        run: |
+          python3 tools/benchmark.py \
+            --manifest benchmarks/memory_regression_manifest.json \
+            --root benchmarks/cache \
+            --satsolv build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 60 \
+            --verification-time-limit 300 \
+            --memory-gib 4 \
+            --output benchmarks/results/memory-regression.json
+      - name: Assert memory failures are eliminated
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('benchmarks/results/memory-regression.json').read_text())
+          failures = []
+          for row in data['rows']:
+              r = row['solvers']['satsolv']
+              stderr = r.get('stderr', '')
+              if r.get('crashed') or r.get('exit_code') not in (0, 10, 20) or 'bad_alloc' in stderr:
+                  failures.append({
+                      'instance': row['instance'],
+                      'exit_code': r.get('exit_code'),
+                      'crashed': r.get('crashed'),
+                      'stderr': stderr[-500:],
+                  })
+          if failures:
+              raise SystemExit('memory regression failed: ' + json.dumps(failures, sort_keys=True))
+          print('PASS: all five former std::bad_alloc cases stayed within the 4 GiB process limit')
+          PY
+      - name: Upload memory regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: satsolv-memory-regression
+          path: benchmarks/results/memory-regression.json
+          if-no-files-found: warn
