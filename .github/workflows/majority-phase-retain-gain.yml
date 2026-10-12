@@ -1,0 +1,71 @@
+name: Majority Phase Retain+Gain
+
+on:
+  push:
+    branches: ['r7/search-majority-phase-ab']
+    paths: ['.github/workflows/majority-phase-retain-gain.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build majority-phase candidate
+        run: |
+          git worktree add --detach /tmp/candidate "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/candidate/src/solver.cpp'); s=p.read_text()
+          anchor='''    start_time_ = std::chrono::steady_clock::now();\n\n    for (const auto& clause : formula.clauses) {'''
+          repl='''    start_time_ = std::chrono::steady_clock::now();\n\n    std::vector<int> polarity_score(static_cast<std::size_t>(nvars_ + 1), 0);\n    for (const auto& clause : formula.clauses) {\n        for (int lit : clause) polarity_score[static_cast<std::size_t>(var(lit))] += lit > 0 ? 1 : -1;\n    }\n    for (int v = 1; v <= nvars_; ++v) saved_phase_[static_cast<std::size_t>(v)] = static_cast<std::int8_t>(polarity_score[static_cast<std::size_t>(v)] >= 0 ? 1 : 0);\n\n    for (const auto& clause : formula.clauses) {'''
+          if anchor not in s: raise SystemExit('phase anchor missing')
+          p.write_text(s.replace(anchor,repl,1))
+          PY
+          cmake -S /tmp/candidate -B /tmp/candidate/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/candidate/build -j2
+          ctest --test-dir /tmp/candidate/build --output-on-failure
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select retain plus DivS
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'ibm-2004-03-k70.cnf','rbsat-v760c43649gyes10.cnf','c499_gr_2pin_w6.shuffled.cnf','PRP_30_35.cnf','ferry8_ks99i.renamed-as.sat05-4005.cnf','iso-ukn004.shuffled-as.sat05-3385.cnf','clqcolor-08-06-07.shuffled-as.sat05-1257.cnf','DivS_568_11.cnf.sanitized.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text()); rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=8: raise SystemExit('retain+gain corpus incomplete')
+          Path('/tmp/rg.json').write_text(json.dumps({'count':8,'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/rg.json --dest benchmarks/cache
+      - name: Run certified candidate
+        run: python3 tools/benchmark.py --manifest /tmp/rg.json --root benchmarks/cache --satsolv /tmp/candidate/build/satsolv --drat-trim /tmp/drat-trim-bin --time-limit 60 --verification-time-limit 300 --memory-gib 4 --output benchmarks/results/majority-retain-gain.json
+      - name: Require all eight solved and verified
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('benchmarks/results/majority-retain-gain.json').read_text())
+          if not d['certification']['passed']: raise SystemExit(d['certification']['violations'])
+          bad=[]
+          for r in d['rows']:
+            x=r['solvers']['satsolv']; print(r['instance'],x['result'],x['elapsed'],x.get('verified'))
+            if x['result'] not in ('SAT','UNSAT') or not x.get('verified'): bad.append(r['instance'])
+          if bad: raise SystemExit(f'retain+gain failures: {bad}')
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: majority-phase-retain-gain-evidence
+          path: benchmarks/results/majority-retain-gain.json
+          if-no-files-found: error
