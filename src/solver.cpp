@@ -61,6 +61,8 @@ void Solver::reset(int variables) {
     activity_.assign(static_cast<std::size_t>(variables + 1), 0.0);
     heap_stamp_.assign(static_cast<std::size_t>(variables + 1), 0);
     saved_phase_.assign(static_cast<std::size_t>(variables + 1), static_cast<std::int8_t>(1));
+    analyze_seen_stamp_.assign(static_cast<std::size_t>(variables + 1), 0U);
+    analyze_generation_ = 0U;
     order_heap_ = {};
     var_inc_ = 1.0;
     root_unsat_ = false;
@@ -304,7 +306,12 @@ void Solver::minimize_clause(std::vector<int>& clause) {
 
 std::pair<std::vector<int>, int> Solver::analyze(int conflict_clause) {
     std::vector<int> learnt(1, 0);
-    std::vector<bool> seen(static_cast<std::size_t>(nvars_ + 1), false);
+    ++analyze_generation_;
+    if (analyze_generation_ == 0U) {
+        std::fill(analyze_seen_stamp_.begin(), analyze_seen_stamp_.end(), 0U);
+        analyze_generation_ = 1U;
+    }
+    const std::uint32_t generation = analyze_generation_;
     int path_count = 0;
     int p = 0;
     int cid = conflict_clause;
@@ -317,8 +324,8 @@ std::pair<std::vector<int>, int> Solver::analyze(int conflict_clause) {
         for (int q : c.lits) {
             const int v = var(q);
             if (p != 0 && v == var(p)) continue;
-            if (seen[static_cast<std::size_t>(v)] || levels_[static_cast<std::size_t>(v)] == 0) continue;
-            seen[static_cast<std::size_t>(v)] = true;
+            if (analyze_seen_stamp_[static_cast<std::size_t>(v)] == generation || levels_[static_cast<std::size_t>(v)] == 0) continue;
+            analyze_seen_stamp_[static_cast<std::size_t>(v)] = generation;
             bump_variable(v);
             if (levels_[static_cast<std::size_t>(v)] == decision_level()) ++path_count;
             else learnt.push_back(q);
@@ -327,9 +334,9 @@ std::pair<std::vector<int>, int> Solver::analyze(int conflict_clause) {
         while (true) {
             if (trail_index == 0) throw std::logic_error("conflict analysis trail underflow");
             p = trail_[--trail_index];
-            if (seen[static_cast<std::size_t>(var(p))]) break;
+            if (analyze_seen_stamp_[static_cast<std::size_t>(var(p))] == generation) break;
         }
-        seen[static_cast<std::size_t>(var(p))] = false;
+        analyze_seen_stamp_[static_cast<std::size_t>(var(p))] = 0U;
         --path_count;
         cid = reasons_[static_cast<std::size_t>(var(p))];
     } while (path_count > 0);
