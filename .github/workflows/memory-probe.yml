@@ -2,7 +2,7 @@ name: Memory Probe Matrix
 
 on:
   push:
-    branches: ['r7/perf-heap-rescale']
+    branches: ['r7/perf-heap-bound']
     paths:
       - src/**
       - include/**
