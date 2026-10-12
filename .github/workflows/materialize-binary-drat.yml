@@ -1,0 +1,37 @@
+name: Materialize Binary DRAT Product
+
+on:
+  push:
+    branches: ['r7/perf-majority-binary-product']
+    paths: ['.github/workflows/materialize-binary-drat.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: r7/perf-majority-binary-product
+      - name: Apply binary DRAT emission
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/solver.cpp')
+          s=p.read_text()
+          old='''void Solver::log_clause(const std::vector<int>& clause) {\n    if (!proof_enabled_) return;\n    const std::streampos before = proof_.tellp();\n    for (int lit : clause) proof_ << lit << ' ';\n    proof_ << "0\\n";\n    const std::streampos after = proof_.tellp();\n    if (before >= 0 && after >= before) stats_.proof_bytes += static_cast<std::uint64_t>(after - before);\n}\n\nvoid Solver::log_empty() {\n    if (!proof_enabled_) return;\n    const std::streampos before = proof_.tellp();\n    proof_ << "0\\n";\n    const std::streampos after = proof_.tellp();\n    if (before >= 0 && after >= before) stats_.proof_bytes += static_cast<std::uint64_t>(after - before);\n}'''
+          new='''void Solver::log_clause(const std::vector<int>& clause) {\n    if (!proof_enabled_) return;\n    proof_.put('a');\n    ++stats_.proof_bytes;\n    for (int lit : clause) {\n        std::uint64_t code = lit > 0\n            ? 2ULL * static_cast<std::uint64_t>(lit)\n            : 2ULL * static_cast<std::uint64_t>(-static_cast<std::int64_t>(lit)) + 1ULL;\n        do {\n            unsigned char byte = static_cast<unsigned char>(code & 0x7fU);\n            code >>= 7U;\n            if (code != 0U) byte = static_cast<unsigned char>(byte | 0x80U);\n            proof_.put(static_cast<char>(byte));\n            ++stats_.proof_bytes;\n        } while (code != 0U);\n    }\n    proof_.put('\\0');\n    ++stats_.proof_bytes;\n}\n\nvoid Solver::log_empty() {\n    if (!proof_enabled_) return;\n    proof_.put('a');\n    proof_.put('\\0');\n    stats_.proof_bytes += 2;\n}'''
+          if old not in s:
+              raise SystemExit('text DRAT logging anchor missing or already applied')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Commit exact product code
+        run: |
+          git config user.name 'SatSolv R7 Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/solver.cpp
+          git commit -m 'perf: emit compact binary DRAT proofs'
+          git push origin HEAD:r7/perf-majority-binary-product
