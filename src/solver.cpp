@@ -233,6 +233,7 @@ int Solver::pick_branch_lit() {
 void Solver::rescale_activities() {
     for (int v = 1; v <= nvars_; ++v) activity_[static_cast<std::size_t>(v)] *= 1e-100;
     var_inc_ *= 1e-100;
+    order_heap_ = {};
     for (int v = 1; v <= nvars_; ++v) {
         ++heap_stamp_[static_cast<std::size_t>(v)];
         order_heap_.push(HeapEntry{activity_[static_cast<std::size_t>(v)], v, heap_stamp_[static_cast<std::size_t>(v)]});
