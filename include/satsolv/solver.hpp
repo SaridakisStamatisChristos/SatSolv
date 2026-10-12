@@ -34,6 +34,14 @@ struct SolverStats {
     std::uint64_t deleted_learnt_clauses = 0;
     std::size_t max_trail = 0;
     std::uint64_t proof_bytes = 0;
+    std::uint64_t core_count = 0, tier2_count = 0, local_count = 0;
+    std::uint64_t peak_live_learnt = 0, peak_tier2 = 0;
+    std::uint64_t promotions = 0, demotions = 0;
+    std::uint64_t deleted_core = 0, deleted_tier2 = 0, deleted_local = 0;
+    std::uint64_t tier2_reused_before_deletion = 0;
+    std::uint64_t deletion_age_sum = 0, reductions = 0;
+    std::uint64_t peak_arena_literals = 0, peak_live_watchers = 0;
+    std::uint64_t live_watchers = 0, database_bytes = 0;
 };
 
 struct SolveOutput {
@@ -48,6 +56,16 @@ public:
     SolveOutput solve(const Formula& formula, const std::optional<std::filesystem::path>& proof_path = std::nullopt);
 
 private:
+    friend struct SolverTestAccess;
+    enum class ClauseTier : std::uint8_t { Original, Core, Tier2, Local };
+    // Cold metadata: preserve the Core-v2 propagation descriptor layout.
+    struct ClauseQuality {
+        std::uint64_t created = 0, touched = 0;
+        ClauseTier tier = ClauseTier::Original;
+        std::uint8_t uses = 0; // Saturates at two distinct analysis conflicts.
+        bool was_tier2 = false;
+        bool tier2_reused = false;
+    };
     struct Clause {
         std::size_t offset = 0;
         std::uint32_t size = 0;
@@ -86,6 +104,7 @@ private:
     SolverStats stats_{};
     int nvars_ = 0;
     std::vector<Clause> clauses_;
+    std::vector<ClauseQuality> quality_;
     std::vector<int> literal_arena_;
     std::size_t dead_literals_ = 0;
     std::vector<std::vector<Watcher>> watches_;
@@ -139,6 +158,9 @@ private:
     int compute_lbd(const std::vector<int>& clause);
     void minimize_clause(std::vector<int>& clause);
     void reduce_database();
+    void refresh_clause_quality(int cid, int current_lbd);
+    void snapshot_database_stats();
+    void set_clause_tier(ClauseQuality& quality, ClauseTier tier);
     bool clause_locked(int cid) const noexcept;
     void compact_clause_arena();
     void log_clause(const std::vector<int>& clause);
@@ -150,3 +172,4 @@ private:
 std::string result_name(SolveResult result);
 
 } // namespace satsolv
+
