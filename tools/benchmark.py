@@ -128,7 +128,10 @@ def main():
         row['solvers']['satsolv']=sat_record
         expected=item.get('expected')
         if r['crashed']:
-            certification_violations.append({'instance':item['name'],'solver':'satsolv','kind':'crash'})
+            certification_violations.append({'instance':item['name'],'solver':'satsolv','kind':'crash','exit_code':r['exit_code']})
+        elif not r['timed_out'] and r['exit_code'] not in (0,10,20):
+            certification_violations.append({'instance':item['name'],'solver':'satsolv','kind':'solver_error',
+                                             'exit_code':r['exit_code'],'stderr':r['stderr'][-1000:]})
         if logical in ('SAT','UNSAT'):
             if not verified:
                 certification_violations.append({'instance':item['name'],'solver':'satsolv','kind':'verification_failure','result':logical})
@@ -150,10 +153,11 @@ def main():
         times=[v['elapsed'] for v in solved]
         par2=[v['elapsed'] if (v['result'] in ('SAT','UNSAT') and (name!='satsolv' or v.get('verified'))) else 2*a.time_limit for v in vals]
         summary[name]={'solved':len(solved),'timeouts':sum(v['timed_out'] for v in vals),'crashes':sum(v['crashed'] for v in vals),
+                       'solver_errors':sum(1 for v in vals if name=='satsolv' and not v['timed_out'] and not v['crashed'] and v.get('exit_code') not in (0,10,20)),
                        'verification_failures':sum(1 for v in vals if name=='satsolv' and v['result'] in ('SAT','UNSAT') and not v.get('verified')),
                        'median_solved_seconds':statistics.median(times) if times else None,'geomean_solved_seconds':geomean(times),'par2':sum(par2)/len(par2)}
     certification={'passed':not certification_violations,'violations':certification_violations}
-    out={'schema':3,'environment':{'platform':platform.platform(),'python':platform.python_version(),'time_limit_seconds':a.time_limit,
+    out={'schema':4,'environment':{'platform':platform.platform(),'python':platform.python_version(),'time_limit_seconds':a.time_limit,
                                   'verification_time_limit_seconds':a.verification_time_limit,'memory_gib':a.memory_gib,
                                   'repository_commit':git_commit(Path('.')),'toolchain':toolchain},
          'manifest':str(a.manifest),'manifest_sha256':sha256(a.manifest),'rows':rows,'summary':summary,'certification':certification}
