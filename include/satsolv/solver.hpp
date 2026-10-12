@@ -19,7 +19,7 @@ enum class SolveResult { Sat, Unsat, Unknown };
 struct SolverConfig {
     std::uint64_t seed = 1;
     double time_limit_seconds = 0.0;
-    int restart_base = 100;
+    int restart_base = 50;
     int reduce_interval = 2000;
     double var_decay = 0.95;
 };
