@@ -1,0 +1,73 @@
+name: EVSIDS + Majority Phase Combo
+
+on:
+  push:
+    branches: ['r7/search-evsids-majority-combo']
+    paths: ['.github/workflows/evsids-majority-combo.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build combo candidate
+        run: |
+          git worktree add --detach /tmp/combo "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/combo/src/solver.cpp'); s=p.read_text()
+          old='''        const int cid = add_clause(clause, false);\n        if (cid >= 0) {\n            for (int lit : clauses_[static_cast<std::size_t>(cid)].lits) {\n                const int v = var(lit);\n                activity_[static_cast<std::size_t>(v)] += 1.0;\n            }\n        }'''
+          if old not in s: raise SystemExit('activity anchor missing')
+          s=s.replace(old,'        add_clause(clause, false);',1)
+          anchor='''    start_time_ = std::chrono::steady_clock::now();\n\n    for (const auto& clause : formula.clauses) {'''
+          repl='''    start_time_ = std::chrono::steady_clock::now();\n\n    std::vector<int> polarity_score(static_cast<std::size_t>(nvars_ + 1), 0);\n    for (const auto& clause : formula.clauses) {\n        for (int lit : clause) polarity_score[static_cast<std::size_t>(var(lit))] += lit > 0 ? 1 : -1;\n    }\n    for (int v = 1; v <= nvars_; ++v) saved_phase_[static_cast<std::size_t>(v)] = static_cast<std::int8_t>(polarity_score[static_cast<std::size_t>(v)] >= 0 ? 1 : 0);\n\n    for (const auto& clause : formula.clauses) {'''
+          if anchor not in s: raise SystemExit('phase anchor missing')
+          p.write_text(s.replace(anchor,repl,1))
+          PY
+          cmake -S /tmp/combo -B /tmp/combo/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/combo/build -j2
+          ctest --test-dir /tmp/combo/build --output-on-failure
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select frozen frontier
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'vmpc_28.shuffled-as.sat05-1957.cnf','DivS_568_11.cnf.sanitized.cnf','combined-crypto1-wff-seed-101-wffvars-500-cryptocplx-31-overlap-2.cnf','brent_69_0.05.cnf','SAT_dat.k10.cnf','rand_net70-40-10.shuffled.cnf','mchess16-mixed-35percent-blocked.cnf','posixpath__joinrealpath_13.cnf','or_randxor_k3_n520_m520.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text()); rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=9: raise SystemExit('frontier incomplete')
+          Path('/tmp/frontier.json').write_text(json.dumps({'count':9,'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/frontier.json --dest benchmarks/cache
+      - name: Run certified combo
+        run: python3 tools/benchmark.py --manifest /tmp/frontier.json --root benchmarks/cache --satsolv /tmp/combo/build/satsolv --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 180 --memory-gib 4 --output benchmarks/results/evsids-majority-combo.json
+      - name: Report
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('benchmarks/results/evsids-majority-combo.json').read_text())
+          if not d['certification']['passed']: raise SystemExit(d['certification']['violations'])
+          print(d['summary']['satsolv'])
+          for r in d['rows']:
+            x=r['solvers']['satsolv']; print(r['instance'],x['result'],x['elapsed'],x.get('verified'))
+          if d['summary']['satsolv']['solved'] < 2: raise SystemExit('combo failed to retain both individual frontier gains')
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evsids-majority-combo-evidence
+          path: benchmarks/results/evsids-majority-combo.json
+          if-no-files-found: error
