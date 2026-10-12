@@ -85,6 +85,8 @@ private:
     std::vector<double> activity_;
     std::vector<std::uint64_t> heap_stamp_;
     std::vector<std::int8_t> saved_phase_;
+    std::vector<std::uint32_t> analyze_seen_stamp_;
+    std::uint32_t analyze_generation_ = 0;
     std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapLess> order_heap_;
     double var_inc_ = 1.0;
     std::ofstream proof_;
