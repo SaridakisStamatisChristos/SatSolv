@@ -360,10 +360,17 @@ bool Solver::clause_locked(int cid) const {
 }
 
 void Solver::reduce_database() {
+    std::vector<bool> locked(clauses_.size(), false);
+    for (int v = 1; v <= nvars_; ++v) {
+        if (assigns_[static_cast<std::size_t>(v)] == -1) continue;
+        const int reason = reasons_[static_cast<std::size_t>(v)];
+        if (reason >= 0) locked[static_cast<std::size_t>(reason)] = true;
+    }
+
     std::vector<int> candidates;
     for (int cid = 0; cid < static_cast<int>(clauses_.size()); ++cid) {
         const Clause& c = clauses_[static_cast<std::size_t>(cid)];
-        if (!c.learnt || c.deleted || c.lits.size() <= 2 || c.lbd <= 2 || clause_locked(cid)) continue;
+        if (!c.learnt || c.deleted || c.lits.size() <= 2 || c.lbd <= 2 || locked[static_cast<std::size_t>(cid)]) continue;
         candidates.push_back(cid);
     }
     std::sort(candidates.begin(), candidates.end(), [this](int a, int b) {
