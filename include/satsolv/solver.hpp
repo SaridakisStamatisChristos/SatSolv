@@ -21,7 +21,7 @@ struct SolverConfig {
     double time_limit_seconds = 0.0;
     int restart_base = 100;
     int reduce_interval = 2000;
-    double var_decay = 0.95;
+    double var_decay = 0.80;
 };
 
 struct SolverStats {
