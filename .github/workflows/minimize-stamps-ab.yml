@@ -1,0 +1,80 @@
+name: Clause Minimization Stamp A/B
+
+on:
+  push:
+    branches: ['r7/perf-minimize-stamps-ab']
+    paths: ['.github/workflows/minimize-stamps-ab.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select hard conflict corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'clqcolor-08-06-07.shuffled-as.sat05-1257.cnf','or_randxor_k3_n520_m520.cnf','mchess16-mixed-35percent-blocked.cnf','posixpath__joinrealpath_13.cnf','combined-crypto1-wff-seed-101-wffvars-500-cryptocplx-31-overlap-2.cnf','rphp_v28000.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text()); rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=len(wanted): raise SystemExit('conflict corpus incomplete')
+          Path('/tmp/conflict.json').write_text(json.dumps({'count':len(rows),'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/conflict.json --dest benchmarks/cache
+      - name: Build baseline and stamp candidate
+        run: |
+          git worktree add --detach /tmp/base "$GITHUB_SHA"
+          git worktree add --detach /tmp/stamp "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          hp=Path('/tmp/stamp/include/satsolv/solver.hpp'); h=hp.read_text()
+          anchor='''    std::vector<std::int8_t> saved_phase_;'''
+          repl='''    std::vector<std::int8_t> saved_phase_;\n    std::vector<std::uint32_t> minimize_present_stamp_;\n    std::uint32_t minimize_generation_ = 0;'''
+          if anchor not in h: raise SystemExit('header anchor missing')
+          hp.write_text(h.replace(anchor,repl,1))
+          sp=Path('/tmp/stamp/src/solver.cpp'); s=sp.read_text()
+          anchor='''    saved_phase_.assign(static_cast<std::size_t>(variables + 1), static_cast<std::int8_t>(1));'''
+          repl='''    saved_phase_.assign(static_cast<std::size_t>(variables + 1), static_cast<std::int8_t>(1));\n    minimize_present_stamp_.assign(static_cast<std::size_t>(2 * variables), 0U);\n    minimize_generation_ = 0U;'''
+          if anchor not in s: raise SystemExit('reset anchor missing')
+          s=s.replace(anchor,repl,1)
+          old='''void Solver::minimize_clause(std::vector<int>& clause) {\n    if (clause.size() <= 2) return;\n    std::unordered_set<int> present(clause.begin(), clause.end());\n    std::vector<int> kept;\n    kept.reserve(clause.size());\n    kept.push_back(clause[0]);\n\n    for (std::size_t i = 1; i < clause.size(); ++i) {\n        const int q = clause[i];\n        const int v = var(q);\n        const int rid = reasons_[static_cast<std::size_t>(v)];\n        bool removable = rid >= 0;\n        if (removable) {\n            const Clause& reason = clauses_[static_cast<std::size_t>(rid)];\n            const int assigned_lit = assigns_[static_cast<std::size_t>(v)] == 1 ? v : -v;\n            bool found_pivot = false;\n            for (int r : reason.lits) {\n                if (r == assigned_lit) {\n                    found_pivot = true;\n                    continue;\n                }\n                if (present.find(r) == present.end()) {\n                    removable = false;\n                    break;\n                }\n            }\n            removable = removable && found_pivot;\n        }\n        if (removable) {\n            present.erase(q);\n        } else {\n            kept.push_back(q);\n        }\n    }\n    clause.swap(kept);\n}'''
+          new='''void Solver::minimize_clause(std::vector<int>& clause) {\n    if (clause.size() <= 2) return;\n    ++minimize_generation_;\n    if (minimize_generation_ == 0U) {\n        std::fill(minimize_present_stamp_.begin(), minimize_present_stamp_.end(), 0U);\n        minimize_generation_ = 1U;\n    }\n    const std::uint32_t generation = minimize_generation_;\n    for (int lit : clause) minimize_present_stamp_[static_cast<std::size_t>(lit_index(lit))] = generation;\n    std::vector<int> kept;\n    kept.reserve(clause.size());\n    kept.push_back(clause[0]);\n\n    for (std::size_t i = 1; i < clause.size(); ++i) {\n        const int q = clause[i];\n        const int v = var(q);\n        const int rid = reasons_[static_cast<std::size_t>(v)];\n        bool removable = rid >= 0;\n        if (removable) {\n            const Clause& reason = clauses_[static_cast<std::size_t>(rid)];\n            const int assigned_lit = assigns_[static_cast<std::size_t>(v)] == 1 ? v : -v;\n            bool found_pivot = false;\n            for (int r : reason.lits) {\n                if (r == assigned_lit) { found_pivot = true; continue; }\n                if (minimize_present_stamp_[static_cast<std::size_t>(lit_index(r))] != generation) { removable = false; break; }\n            }\n            removable = removable && found_pivot;\n        }\n        if (removable) {\n            minimize_present_stamp_[static_cast<std::size_t>(lit_index(q))] = 0U;\n        } else {\n            kept.push_back(q);\n        }\n    }\n    clause.swap(kept);\n}'''
+          if old not in s: raise SystemExit('minimize anchor missing')
+          sp.write_text(s.replace(old,new,1))
+          PY
+          for d in /tmp/base /tmp/stamp; do cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release; cmake --build "$d/build" -j2; ctest --test-dir "$d/build" --output-on-failure; done
+      - name: Run certified A/B
+        run: |
+          mkdir -p benchmarks/results/minimize-stamps-ab
+          for mode in base stamp; do python3 tools/benchmark.py --manifest /tmp/conflict.json --root benchmarks/cache --satsolv "/tmp/${mode}/build/satsolv" --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 180 --memory-gib 4 --output "benchmarks/results/minimize-stamps-ab/${mode}.json"; done
+      - name: Compare
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          ds={m:json.loads(Path(f'benchmarks/results/minimize-stamps-ab/{m}.json').read_text()) for m in ('base','stamp')}
+          for m,d in ds.items():
+            if not d['certification']['passed']: raise SystemExit(f'{m} certification failed')
+            conf=sum(int(r['solvers']['satsolv'].get('stats',{}).get('conflicts',0)) for r in d['rows']); sec=sum(float(r['solvers']['satsolv'].get('stats',{}).get('solve_seconds',r['solvers']['satsolv']['elapsed'])) for r in d['rows']); print(m,d['summary']['satsolv'],'conflicts_s',conf/max(sec,1e-9))
+          bm={r['instance']:r['solvers']['satsolv'] for r in ds['base']['rows']}; cm={r['instance']:r['solvers']['satsolv'] for r in ds['stamp']['rows']}
+          for n in sorted(bm): print(n,'base',bm[n]['result'],round(bm[n]['elapsed'],3),'stamp',cm[n]['result'],round(cm[n]['elapsed'],3))
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minimize-stamps-ab-evidence
+          path: benchmarks/results/minimize-stamps-ab/*.json
+          if-no-files-found: error
