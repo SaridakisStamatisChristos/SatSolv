@@ -384,19 +384,29 @@ void Solver::reduce_database() {
 
 void Solver::log_clause(const std::vector<int>& clause) {
     if (!proof_enabled_) return;
-    const std::streampos before = proof_.tellp();
-    for (int lit : clause) proof_ << lit << ' ';
-    proof_ << "0\n";
-    const std::streampos after = proof_.tellp();
-    if (before >= 0 && after >= before) stats_.proof_bytes += static_cast<std::uint64_t>(after - before);
+    proof_.put('a');
+    ++stats_.proof_bytes;
+    for (int lit : clause) {
+        std::uint64_t code = lit > 0
+            ? 2ULL * static_cast<std::uint64_t>(lit)
+            : 2ULL * static_cast<std::uint64_t>(-static_cast<std::int64_t>(lit)) + 1ULL;
+        do {
+            unsigned char byte = static_cast<unsigned char>(code & 0x7fU);
+            code >>= 7U;
+            if (code != 0U) byte = static_cast<unsigned char>(byte | 0x80U);
+            proof_.put(static_cast<char>(byte));
+            ++stats_.proof_bytes;
+        } while (code != 0U);
+    }
+    proof_.put('\0');
+    ++stats_.proof_bytes;
 }
 
 void Solver::log_empty() {
     if (!proof_enabled_) return;
-    const std::streampos before = proof_.tellp();
-    proof_ << "0\n";
-    const std::streampos after = proof_.tellp();
-    if (before >= 0 && after >= before) stats_.proof_bytes += static_cast<std::uint64_t>(after - before);
+    proof_.put('a');
+    proof_.put('\0');
+    stats_.proof_bytes += 2;
 }
 
 std::uint64_t Solver::luby(std::uint64_t index) {
