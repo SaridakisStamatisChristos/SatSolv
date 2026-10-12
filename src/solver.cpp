@@ -241,6 +241,13 @@ void Solver::rescale_activities() {
 }
 
 void Solver::bump_variable(int variable) {
+    const std::size_t heap_limit = std::max<std::size_t>(4096U, static_cast<std::size_t>(nvars_ + 1) * 4U);
+    if (order_heap_.size() > heap_limit) {
+        order_heap_ = {};
+        for (int v = 1; v <= nvars_; ++v) {
+            order_heap_.push(HeapEntry{activity_[static_cast<std::size_t>(v)], v, heap_stamp_[static_cast<std::size_t>(v)]});
+        }
+    }
     activity_[static_cast<std::size_t>(variable)] += var_inc_;
     if (activity_[static_cast<std::size_t>(variable)] > 1e100) rescale_activities();
     ++heap_stamp_[static_cast<std::size_t>(variable)];
