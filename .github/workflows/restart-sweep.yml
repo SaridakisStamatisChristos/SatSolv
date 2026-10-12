@@ -1,0 +1,137 @@
+name: Restart Base Sweep
+
+on:
+  push:
+    branches: ['r7/search-restart-sweep-v2']
+    paths:
+      - .github/workflows/restart-sweep.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+
+      - name: Select frozen frontier corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted = {
+              'vmpc_28.shuffled-as.sat05-1957.cnf',
+              'DivS_568_11.cnf.sanitized.cnf',
+              'combined-crypto1-wff-seed-101-wffvars-500-cryptocplx-31-overlap-2.cnf',
+              'brent_69_0.05.cnf',
+              'SAT_dat.k10.cnf',
+              'rand_net70-40-10.shuffled.cnf',
+              'mchess16-mixed-35percent-blocked.cnf',
+              'posixpath__joinrealpath_13.cnf',
+              'or_randxor_k3_n520_m520.cnf',
+          }
+          source = json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          rows = [x for x in source['instances'] if x['name'] in wanted]
+          missing = wanted - {x['name'] for x in rows}
+          if missing:
+              raise SystemExit(f'missing instances: {sorted(missing)}')
+          Path('/tmp/frontier.json').write_text(json.dumps({'count': len(rows), 'instances': rows}, indent=2) + '\n')
+          PY
+
+      - name: Fetch and hash-check frontier inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/frontier.json --dest benchmarks/cache
+
+      - name: Build restart variants
+        run: |
+          for base in 32 64 100 160 256; do
+            dir="/tmp/r${base}"
+            git worktree add --detach "$dir" "$GITHUB_SHA"
+            python3 - "$dir/include/satsolv/solver.hpp" "$base" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1])
+          base = sys.argv[2]
+          s = p.read_text()
+          old = 'int restart_base = 100;'
+          if old not in s:
+              raise SystemExit('restart default anchor missing')
+          p.write_text(s.replace(old, f'int restart_base = {base};', 1))
+          PY
+            cmake -S "$dir" -B "$dir/build" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$dir/build" -j2
+          done
+
+      - name: Run certified restart sweep
+        run: |
+          mkdir -p benchmarks/results/restart-sweep
+          for base in 32 64 100 160 256; do
+            python3 tools/benchmark.py \
+              --manifest /tmp/frontier.json \
+              --root benchmarks/cache \
+              --satsolv "/tmp/r${base}/build/satsolv" \
+              --drat-trim /tmp/drat-trim-bin \
+              --time-limit 15 \
+              --verification-time-limit 180 \
+              --memory-gib 4 \
+              --output "benchmarks/results/restart-sweep/r${base}.json"
+          done
+
+      - name: Rank restart policies
+        run: |
+          python3 - <<'PY'
+          import json, math
+          from pathlib import Path
+          bases = [32,64,100,160,256]
+          rows = []
+          for base in bases:
+              d = json.loads(Path(f'benchmarks/results/restart-sweep/r{base}.json').read_text())
+              s = d['summary']['satsolv']
+              if not d['certification']['passed']:
+                  raise SystemExit(f'r{base} certification failed: {d["certification"]["violations"]}')
+              conflicts = 0
+              solve_seconds = 0.0
+              cells = {}
+              for row in d['rows']:
+                  rec = row['solvers']['satsolv']
+                  st = rec.get('stats', {})
+                  conflicts += int(st.get('conflicts', 0))
+                  solve_seconds += float(st.get('solve_seconds', rec['elapsed']))
+                  cells[row['instance']] = {
+                      'result': rec['result'],
+                      'elapsed': rec['elapsed'],
+                      'conflicts': int(st.get('conflicts', 0)),
+                      'restarts': int(st.get('restarts', 0)),
+                  }
+              cps = conflicts / max(solve_seconds, 1e-9)
+              rows.append((base, s['solved'], s['par2'], s['geomean_solved_seconds'], cps, cells))
+          print('base,solved,par2,geomean_solved,conflicts_per_second')
+          for base, solved, par2, geo, cps, _ in rows:
+              print(f'{base},{solved},{par2:.6f},{geo if geo is not None else "NA"},{cps:.1f}')
+          print('\nPer-cell delta versus baseline r100:')
+          base_cells = next(x[5] for x in rows if x[0] == 100)
+          for base, _, _, _, _, cells in rows:
+              if base == 100: continue
+              print(f'-- r{base} --')
+              for name in sorted(cells):
+                  b = base_cells[name]; c = cells[name]
+                  if b['result'] != c['result'] or abs(b['elapsed'] - c['elapsed']) >= 0.5:
+                      print(f'{name}: {b["result"]} {b["elapsed"]:.3f}s -> {c["result"]} {c["elapsed"]:.3f}s')
+          PY
+
+      - name: Upload sweep evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restart-sweep-evidence
+          path: benchmarks/results/restart-sweep/*.json
+          if-no-files-found: error
