@@ -3,13 +3,13 @@
 #include "satsolv/parser.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <queue>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace satsolv {
@@ -49,13 +49,24 @@ public:
 
 private:
     struct Clause {
-        std::vector<int> lits;
-        int watch0 = 0;
-        int watch1 = 0;
+        std::size_t offset = 0;
+        std::uint32_t size = 0;
+        std::uint32_t scan_cursor = 2;
+        std::uint32_t reason_refs = 0;
         bool learnt = false;
         bool deleted = false;
         int lbd = 0;
         double activity = 0.0;
+    };
+
+    struct Watcher {
+        int clause = -1;
+        int blocker = 0;
+    };
+
+    struct BinaryWatcher {
+        int clause = -1;
+        int implied = 0;
     };
 
     struct HeapEntry {
@@ -75,7 +86,10 @@ private:
     SolverStats stats_{};
     int nvars_ = 0;
     std::vector<Clause> clauses_;
-    std::vector<std::vector<int>> watches_;
+    std::vector<int> literal_arena_;
+    std::size_t dead_literals_ = 0;
+    std::vector<std::vector<Watcher>> watches_;
+    std::vector<std::vector<BinaryWatcher>> binary_watches_;
     std::vector<std::int8_t> assigns_;
     std::vector<int> levels_;
     std::vector<int> reasons_;
@@ -87,6 +101,15 @@ private:
     std::vector<std::int8_t> saved_phase_;
     std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapLess> order_heap_;
     double var_inc_ = 1.0;
+
+    std::vector<std::uint8_t> analyze_seen_;
+    std::vector<int> analyze_touched_;
+    std::vector<std::uint64_t> level_marks_;
+    std::uint64_t level_epoch_ = 0;
+    std::vector<std::uint64_t> literal_marks_;
+    std::uint64_t literal_epoch_ = 0;
+    std::vector<int> minimize_scratch_;
+
     std::ofstream proof_;
     bool proof_enabled_ = false;
     bool root_unsat_ = false;
@@ -100,9 +123,11 @@ private:
     int value_lit(int lit) const noexcept;
     int decision_level() const noexcept { return static_cast<int>(trail_lim_.size()); }
     bool timed_out() const;
+    int clause_lit(const Clause& clause, std::size_t index) const noexcept;
+    int& clause_lit(Clause& clause, std::size_t index) noexcept;
 
     void reset(int variables);
-    int add_clause(std::vector<int> lits, bool learnt, int lbd = 0);
+    int add_clause(const std::vector<int>& lits, bool learnt, int lbd = 0);
     bool enqueue(int lit, int reason);
     int propagate();
     void cancel_until(int level);
@@ -110,13 +135,15 @@ private:
     void bump_variable(int variable);
     void decay_activities();
     void rescale_activities();
-    std::pair<std::vector<int>, int> analyze(int conflict_clause);
-    int compute_lbd(const std::vector<int>& clause) const;
+    void analyze(int conflict_clause, std::vector<int>& learnt, int& backtrack);
+    int compute_lbd(const std::vector<int>& clause);
     void minimize_clause(std::vector<int>& clause);
     void reduce_database();
-    bool clause_locked(int cid) const;
+    bool clause_locked(int cid) const noexcept;
+    void compact_clause_arena();
     void log_clause(const std::vector<int>& clause);
     void log_empty();
+    static void write_binary_literal(std::ofstream& out, int lit, std::uint64_t& byte_counter);
     static std::uint64_t luby(std::uint64_t index);
 };
 
