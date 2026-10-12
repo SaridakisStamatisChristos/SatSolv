@@ -6,7 +6,7 @@ option(SATSOLV_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 
 add_library(satsolv_core
     src/parser.cpp
-    src/solver.cpp
+    src/solver_v2.cpp
 )
 target_include_directories(satsolv_core PUBLIC include)
 target_compile_features(satsolv_core PUBLIC cxx_std_20)
