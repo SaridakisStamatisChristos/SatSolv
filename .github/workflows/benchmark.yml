@@ -71,3 +71,5 @@ jobs:
             benchmarks/results/acceptance.json
             benchmarks/results/acceptance.md
           if-no-files-found: warn
+
+# Semantics-neutral R7 evidence trigger: force a fresh certified acceptance run.
