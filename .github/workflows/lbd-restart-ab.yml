@@ -1,0 +1,85 @@
+name: Adaptive LBD Restart A/B
+
+on:
+  push:
+    branches: ['r7/search-lbd-restart-ab']
+    paths: ['.github/workflows/lbd-restart-ab.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select frozen frontier corpus
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'vmpc_28.shuffled-as.sat05-1957.cnf','DivS_568_11.cnf.sanitized.cnf','combined-crypto1-wff-seed-101-wffvars-500-cryptocplx-31-overlap-2.cnf','brent_69_0.05.cnf','SAT_dat.k10.cnf','rand_net70-40-10.shuffled.cnf','mchess16-mixed-35percent-blocked.cnf','posixpath__joinrealpath_13.cnf','or_randxor_k3_n520_m520.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text()); rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=len(wanted): raise SystemExit('frontier incomplete')
+          Path('/tmp/frontier.json').write_text(json.dumps({'count':len(rows),'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch and hash-check inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/frontier.json --dest benchmarks/cache
+      - name: Build baseline and adaptive-restart candidate
+        run: |
+          git worktree add --detach /tmp/base "$GITHUB_SHA"
+          git worktree add --detach /tmp/adaptive "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          hp=Path('/tmp/adaptive/include/satsolv/solver.hpp'); h=hp.read_text()
+          h=h.replace('#include <filesystem>\n','#include <filesystem>\n#include <deque>\n',1)
+          anchor='''    std::uint64_t next_restart_ = 100;'''
+          repl='''    std::uint64_t next_restart_ = 100;\n    std::deque<int> recent_lbd_;\n    double recent_lbd_sum_ = 0.0;\n    double global_lbd_sum_ = 0.0;\n    std::uint64_t global_lbd_count_ = 0;'''
+          if anchor not in h: raise SystemExit('restart-field anchor missing')
+          hp.write_text(h.replace(anchor,repl,1))
+
+          sp=Path('/tmp/adaptive/src/solver.cpp'); s=sp.read_text()
+          anchor='''    next_restart_ = static_cast<std::uint64_t>(config_.restart_base) * luby(restart_index_);'''
+          repl='''    next_restart_ = static_cast<std::uint64_t>(config_.restart_base) * luby(restart_index_);\n    recent_lbd_.clear();\n    recent_lbd_sum_ = 0.0;\n    global_lbd_sum_ = 0.0;\n    global_lbd_count_ = 0;'''
+          if anchor not in s: raise SystemExit('reset restart anchor missing')
+          s=s.replace(anchor,repl,1)
+          anchor='''                    const int lbd = compute_lbd(learnt);\n                    log_clause(learnt);'''
+          repl='''                    const int lbd = compute_lbd(learnt);\n                    global_lbd_sum_ += static_cast<double>(lbd);\n                    ++global_lbd_count_;\n                    recent_lbd_.push_back(lbd);\n                    recent_lbd_sum_ += static_cast<double>(lbd);\n                    if (recent_lbd_.size() > 50U) {\n                        recent_lbd_sum_ -= static_cast<double>(recent_lbd_.front());\n                        recent_lbd_.pop_front();\n                    }\n                    log_clause(learnt);'''
+          if anchor not in s: raise SystemExit('LBD anchor missing')
+          s=s.replace(anchor,repl,1)
+          anchor='''                    if (conflicts_since_restart_ >= next_restart_) {\n                        cancel_until(0);'''
+          repl='''                    const bool lbd_restart = recent_lbd_.size() == 50U &&\n                        conflicts_since_restart_ >= 50U && global_lbd_count_ >= 100U &&\n                        (recent_lbd_sum_ / 50.0) > 1.25 * (global_lbd_sum_ / static_cast<double>(global_lbd_count_));\n                    if (lbd_restart || conflicts_since_restart_ >= next_restart_) {\n                        cancel_until(0);'''
+          if anchor not in s: raise SystemExit('restart condition anchor missing')
+          s=s.replace(anchor,repl,1)
+          sp.write_text(s)
+          PY
+          for d in /tmp/base /tmp/adaptive; do cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release; cmake --build "$d/build" -j2; ctest --test-dir "$d/build" --output-on-failure; done
+      - name: Run certified A/B
+        run: |
+          mkdir -p benchmarks/results/lbd-restart-ab
+          for mode in base adaptive; do python3 tools/benchmark.py --manifest /tmp/frontier.json --root benchmarks/cache --satsolv "/tmp/${mode}/build/satsolv" --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 180 --memory-gib 4 --output "benchmarks/results/lbd-restart-ab/${mode}.json"; done
+      - name: Compare
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for m in ('base','adaptive'):
+            d=json.loads(Path(f'benchmarks/results/lbd-restart-ab/{m}.json').read_text()); assert d['certification']['passed']; s=d['summary']['satsolv']; print(m,s)
+            for r in d['rows']:
+              x=r['solvers']['satsolv']; st=x.get('stats',{}); print(m,r['instance'],x['result'],round(x['elapsed'],3),'conf',st.get('conflicts'),'rest',st.get('restarts'))
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbd-restart-ab-evidence
+          path: benchmarks/results/lbd-restart-ab/*.json
+          if-no-files-found: error
