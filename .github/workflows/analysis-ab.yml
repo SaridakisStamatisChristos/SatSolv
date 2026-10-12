@@ -1,0 +1,113 @@
+name: Conflict Analysis A/B
+
+on:
+  push:
+    branches: ['r7/perf-seen-stamps']
+    paths:
+      - .github/workflows/analysis-ab.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Materialize Experiment 5 baseline
+        run: git worktree add --detach /tmp/satsolv-base 16a8293471a7ff71939687cfbb0401e2a6238f8e
+      - name: Build candidate and baseline
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j2
+          cmake -S /tmp/satsolv-base -B /tmp/satsolv-base/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/satsolv-base/build -j2
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select conflict-heavy instances
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted = {
+              'or_randxor_k3_n520_m520.cnf',
+              'mchess16-mixed-35percent-blocked.cnf',
+              'nonogram156.shuffled-as.sat03-430.cnf',
+              'clqcolor-08-06-07.shuffled-as.sat05-1257.cnf',
+          }
+          source = json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          rows = [x for x in source['instances'] if x['name'] in wanted]
+          missing = wanted - {x['name'] for x in rows}
+          if missing:
+              raise SystemExit(f'missing instances: {sorted(missing)}')
+          Path('/tmp/analysis-ab.json').write_text(json.dumps({'count': len(rows), 'instances': rows}, indent=2) + '\n')
+          PY
+      - name: Fetch and hash-check inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/analysis-ab.json --dest benchmarks/cache
+      - name: Run baseline
+        run: |
+          python3 tools/benchmark.py \
+            --manifest /tmp/analysis-ab.json \
+            --root benchmarks/cache \
+            --satsolv /tmp/satsolv-base/build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 15 \
+            --verification-time-limit 300 \
+            --memory-gib 4 \
+            --output benchmarks/results/analysis-base.json
+      - name: Run candidate
+        run: |
+          python3 tools/benchmark.py \
+            --manifest /tmp/analysis-ab.json \
+            --root benchmarks/cache \
+            --satsolv build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 15 \
+            --verification-time-limit 300 \
+            --memory-gib 4 \
+            --output benchmarks/results/analysis-candidate.json
+      - name: Compare search throughput
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          base = json.loads(Path('benchmarks/results/analysis-base.json').read_text())
+          cand = json.loads(Path('benchmarks/results/analysis-candidate.json').read_text())
+          bmap = {r['instance']: r['solvers']['satsolv'] for r in base['rows']}
+          cmap = {r['instance']: r['solvers']['satsolv'] for r in cand['rows']}
+          total_b_conf = total_c_conf = 0
+          total_b_sec = total_c_sec = 0.0
+          print('instance,base_result,candidate_result,base_conflicts_s,candidate_conflicts_s,ratio')
+          for name in sorted(bmap):
+              b, c = bmap[name], cmap[name]
+              bs, cs = b.get('stats', {}), c.get('stats', {})
+              bt = max(float(bs.get('solve_seconds', b['elapsed'])), 1e-9)
+              ct = max(float(cs.get('solve_seconds', c['elapsed'])), 1e-9)
+              bc, cc = int(bs.get('conflicts', 0)), int(cs.get('conflicts', 0))
+              br, cr = bc/bt, cc/ct
+              total_b_conf += bc; total_c_conf += cc
+              total_b_sec += bt; total_c_sec += ct
+              print(f'{name},{b["result"]},{c["result"]},{br:.1f},{cr:.1f},{(cr/br if br else 0):.4f}')
+          aggregate_b = total_b_conf/total_b_sec
+          aggregate_c = total_c_conf/total_c_sec
+          print(f'aggregate_conflicts_per_second baseline={aggregate_b:.1f} candidate={aggregate_c:.1f}')
+          print(f'ratio={aggregate_c/aggregate_b:.4f}')
+          if not base['certification']['passed'] or not cand['certification']['passed']:
+              raise SystemExit('A/B certification failure')
+          PY
+      - name: Upload A/B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conflict-analysis-ab-evidence
+          path: |
+            benchmarks/results/analysis-base.json
+            benchmarks/results/analysis-candidate.json
+          if-no-files-found: error
