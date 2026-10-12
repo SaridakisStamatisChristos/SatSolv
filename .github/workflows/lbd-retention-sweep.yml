@@ -1,0 +1,78 @@
+name: Learnt LBD Retention Sweep
+
+on:
+  push:
+    branches: ['r7/search-lbd-retention-sweep']
+    paths: ['.github/workflows/lbd-retention-sweep.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select hard UNSAT frontier
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'SAT_dat.k10.cnf','rand_net70-40-10.shuffled.cnf','mchess16-mixed-35percent-blocked.cnf','posixpath__joinrealpath_13.cnf','or_randxor_k3_n520_m520.cnf','clqcolor-08-06-07.shuffled-as.sat05-1257.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text()); rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=6: raise SystemExit('UNSAT corpus incomplete')
+          Path('/tmp/unsat.json').write_text(json.dumps({'count':6,'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/unsat.json --dest benchmarks/cache
+      - name: Build retention variants
+        run: |
+          for lbd in 2 3 4 6; do
+            d="/tmp/lbd${lbd}"
+            git worktree add --detach "$d" "$GITHUB_SHA"
+            python3 - "$d/src/solver.cpp" "$lbd" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]); val=sys.argv[2]; s=p.read_text(); old='c.lbd <= 2'
+          if old not in s: raise SystemExit('LBD retention anchor missing')
+          p.write_text(s.replace(old,f'c.lbd <= {val}',1))
+          PY
+            cmake -S "$d" -B "$d/build" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$d/build" -j2
+          done
+      - name: Run certified sweep
+        run: |
+          mkdir -p benchmarks/results/lbd-retention
+          for lbd in 2 3 4 6; do
+            python3 tools/benchmark.py --manifest /tmp/unsat.json --root benchmarks/cache --satsolv "/tmp/lbd${lbd}/build/satsolv" --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 180 --memory-gib 4 --output "benchmarks/results/lbd-retention/lbd${lbd}.json"
+          done
+      - name: Compare
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for v in (2,3,4,6):
+            d=json.loads(Path(f'benchmarks/results/lbd-retention/lbd{v}.json').read_text())
+            if not d['certification']['passed']: raise SystemExit(f'LBD{v} certification failed')
+            s=d['summary']['satsolv']
+            conf=sum(int(r['solvers']['satsolv'].get('stats',{}).get('conflicts',0)) for r in d['rows'])
+            sec=sum(float(r['solvers']['satsolv'].get('stats',{}).get('solve_seconds',r['solvers']['satsolv']['elapsed'])) for r in d['rows'])
+            deleted=sum(int(r['solvers']['satsolv'].get('stats',{}).get('deleted_learnt_clauses',0)) for r in d['rows'])
+            print(f'lbd_core={v} solved={s["solved"]} par2={s["par2"]:.6f} conflicts_s={conf/max(sec,1e-9):.1f} deleted={deleted}')
+            for r in d['rows']:
+              x=r['solvers']['satsolv']; print(' ',r['instance'],x['result'],round(x['elapsed'],3),x.get('verified'))
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbd-retention-sweep-evidence
+          path: benchmarks/results/lbd-retention/*.json
+          if-no-files-found: error
