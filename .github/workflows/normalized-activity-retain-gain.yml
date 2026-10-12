@@ -1,0 +1,71 @@
+name: Normalized Activity Retain+Gain
+
+on:
+  push:
+    branches: ['r7/search-normalized-activity']
+    paths: ['.github/workflows/normalized-activity-retain-gain.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Build normalized-activity candidate
+        run: |
+          git worktree add --detach /tmp/candidate "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/candidate/src/solver.cpp'); s=p.read_text()
+          anchor='''    // Loading-time activity is occurrence based. Rebuild once from final scores instead of\n    // retaining one stale priority-queue entry per literal occurrence.\n    order_heap_ = {};'''
+          repl='''    double max_initial_activity = 0.0;\n    for (int v = 1; v <= nvars_; ++v) max_initial_activity = std::max(max_initial_activity, activity_[static_cast<std::size_t>(v)]);\n    if (max_initial_activity > 0.0) {\n        for (int v = 1; v <= nvars_; ++v) activity_[static_cast<std::size_t>(v)] /= max_initial_activity;\n    }\n\n    // Preserve occurrence-based initial ordering while letting conflict EVSIDS dominate quickly.\n    order_heap_ = {};'''
+          if anchor not in s: raise SystemExit('normalization anchor missing')
+          p.write_text(s.replace(anchor,repl,1))
+          PY
+          cmake -S /tmp/candidate -B /tmp/candidate/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/candidate/build -j2
+          ctest --test-dir /tmp/candidate/build --output-on-failure
+      - name: Build pinned drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Select retain plus vmpc
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          wanted={'ibm-2004-03-k70.cnf','rbsat-v760c43649gyes10.cnf','c499_gr_2pin_w6.shuffled.cnf','PRP_30_35.cnf','ferry8_ks99i.renamed-as.sat05-4005.cnf','iso-ukn004.shuffled-as.sat05-3385.cnf','clqcolor-08-06-07.shuffled-as.sat05-1257.cnf','vmpc_28.shuffled-as.sat05-1957.cnf'}
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text()); rows=[x for x in src['instances'] if x['name'] in wanted]
+          if len(rows)!=8: raise SystemExit('retain+gain corpus incomplete')
+          Path('/tmp/rg.json').write_text(json.dumps({'count':8,'instances':rows},indent=2)+'\n')
+          PY
+      - name: Fetch inputs
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/rg.json --dest benchmarks/cache
+      - name: Run certified candidate
+        run: python3 tools/benchmark.py --manifest /tmp/rg.json --root benchmarks/cache --satsolv /tmp/candidate/build/satsolv --drat-trim /tmp/drat-trim-bin --time-limit 60 --verification-time-limit 300 --memory-gib 4 --output benchmarks/results/normalized-retain-gain.json
+      - name: Require all eight solved and verified
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('benchmarks/results/normalized-retain-gain.json').read_text())
+          if not d['certification']['passed']: raise SystemExit(d['certification']['violations'])
+          bad=[]
+          for r in d['rows']:
+            x=r['solvers']['satsolv']; print(r['instance'],x['result'],x['elapsed'],x.get('verified'))
+            if x['result'] not in ('SAT','UNSAT') or not x.get('verified'): bad.append(r['instance'])
+          if bad: raise SystemExit(f'retain+gain failures: {bad}')
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: normalized-activity-retain-gain-evidence
+          path: benchmarks/results/normalized-retain-gain.json
+          if-no-files-found: error
