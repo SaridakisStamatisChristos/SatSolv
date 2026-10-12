@@ -1,3 +1,4 @@
+# Evidence trigger: qualify majority-phase + binary-DRAT product candidate.
 name: Acceptance Benchmark
 
 on:
@@ -78,5 +79,3 @@ jobs:
             benchmarks/results/acceptance.json
             benchmarks/results/acceptance.md
           if-no-files-found: warn
-
-# R7 acceptance run: solver budget and independent proof-verification budget are explicit and fail closed.
