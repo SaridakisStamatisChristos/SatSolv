@@ -5,6 +5,11 @@ on:
     branches: ['r7/**']
     paths:
       - benchmarks/competition_manifest.json
+      - src/**
+      - include/**
+      - CMakeLists.txt
+      - tools/benchmark.py
+      - tools/report_benchmark.py
       - .github/workflows/benchmark.yml
   workflow_dispatch:
     inputs:
