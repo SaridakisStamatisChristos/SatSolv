@@ -97,6 +97,7 @@ def main():
     ap.add_argument('--time-limit',type=float,default=60.0)
     ap.add_argument('--verification-time-limit',type=float,default=300.0,
                     help='Wall-clock seconds allowed for independent proof verification per UNSAT result')
+    ap.add_argument('--kissat-proof',action='store_true',help='Supplementary proof-enabled Kissat comparison; original acceptance is unchanged')
     ap.add_argument('--memory-gib',type=float,default=4.0)
     ap.add_argument('--output',type=Path,required=True)
     a=ap.parse_args()
@@ -139,8 +140,20 @@ def main():
                 certification_violations.append({'instance':item['name'],'solver':'satsolv','kind':'wrong_result','expected':expected,'result':logical})
         for name,binary in [('minisat',a.minisat),('kissat',a.kissat)]:
             if binary:
-                br=run_cmd([str(binary.resolve()),str(cnf)],a.time_limit,memory)
+                baseline_proof=work/(item['name'].replace('/','_')+'.kissat.drat')
+                command=[str(binary.resolve()),str(cnf)]
+                if name=='kissat' and a.kissat_proof: command.append(str(baseline_proof))
+                br=run_cmd(command,a.time_limit,memory)
                 br['result']='TIMEOUT' if br['timed_out'] else classify(br['stdout']+'\n'+br['stderr'])
+                if name=='kissat' and a.kissat_proof:
+                    br['verified']=False
+                    if br['result']=='UNSAT': br['verified'],br['verification']=verify_unsat(a.drat_trim.resolve(),cnf,baseline_proof,a.verification_time_limit)
+                    elif br['result']=='SAT': br['verified'],br['verification']=verify_sat(checker,cnf,br['stdout'],work)
+                    br['proof_bytes']=baseline_proof.stat().st_size if baseline_proof.exists() else 0
+                    if br['result'] in ('SAT','UNSAT') and not br['verified']:
+                        certification_violations.append({'instance':item['name'],'solver':name,'kind':'verification_failure'})
+                    if br['crashed'] or (not br['timed_out'] and br['exit_code'] not in (0,10,20)):
+                        certification_violations.append({'instance':item['name'],'solver':name,'kind':'solver_error','exit_code':br['exit_code']})
                 row['solvers'][name]=br
                 if br['result'] in ('SAT','UNSAT') and expected in ('SAT','UNSAT') and br['result'] != expected:
                     certification_violations.append({'instance':item['name'],'solver':name,'kind':'baseline_disagrees_with_manifest','expected':expected,'result':br['result']})
@@ -149,16 +162,16 @@ def main():
     for name in ['satsolv','minisat','kissat']:
         vals=[r['solvers'][name] for r in rows if name in r['solvers']]
         if not vals: continue
-        solved=[v for v in vals if v['result'] in ('SAT','UNSAT') and (name!='satsolv' or v.get('verified'))]
+        solved=[v for v in vals if v['result'] in ('SAT','UNSAT') and ((name!='satsolv' and not (name=='kissat' and a.kissat_proof)) or v.get('verified'))]
         times=[v['elapsed'] for v in solved]
-        par2=[v['elapsed'] if (v['result'] in ('SAT','UNSAT') and (name!='satsolv' or v.get('verified'))) else 2*a.time_limit for v in vals]
+        par2=[v['elapsed'] if (v['result'] in ('SAT','UNSAT') and ((name!='satsolv' and not (name=='kissat' and a.kissat_proof)) or v.get('verified'))) else 2*a.time_limit for v in vals]
         summary[name]={'solved':len(solved),'timeouts':sum(v['timed_out'] for v in vals),'crashes':sum(v['crashed'] for v in vals),
                        'solver_errors':sum(1 for v in vals if name=='satsolv' and not v['timed_out'] and not v['crashed'] and v.get('exit_code') not in (0,10,20)),
                        'verification_failures':sum(1 for v in vals if name=='satsolv' and v['result'] in ('SAT','UNSAT') and not v.get('verified')),
                        'median_solved_seconds':statistics.median(times) if times else None,'geomean_solved_seconds':geomean(times),'par2':sum(par2)/len(par2)}
     certification={'passed':not certification_violations,'violations':certification_violations}
     out={'schema':4,'environment':{'platform':platform.platform(),'python':platform.python_version(),'time_limit_seconds':a.time_limit,
-                                  'verification_time_limit_seconds':a.verification_time_limit,'memory_gib':a.memory_gib,
+                                  'verification_time_limit_seconds':a.verification_time_limit,'kissat_proof_enabled':a.kissat_proof,'memory_gib':a.memory_gib,
                                   'repository_commit':git_commit(Path('.')),'toolchain':toolchain},
          'manifest':str(a.manifest),'manifest_sha256':sha256(a.manifest),'rows':rows,'summary':summary,'certification':certification}
     a.output.parent.mkdir(parents=True,exist_ok=True); a.output.write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
@@ -167,3 +180,4 @@ def main():
         print(json.dumps({'certification_violations':certification_violations},indent=2,sort_keys=True))
         raise SystemExit(3)
 if __name__=='__main__': main()
+

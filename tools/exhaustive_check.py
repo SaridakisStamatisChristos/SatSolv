@@ -39,13 +39,8 @@ def run_one(binary: Path, nvars, clauses, tmp: Path, idx: int):
         if status != 'SATISFIABLE' or not ok:
             raise AssertionError(f'independent model validation failed idx={idx}: {message}')
     else:
-        db=list(check_rup.parse_cnf(cnf)); additions=check_rup.parse_proof(proof)
-        if not additions or additions[-1] != ():
-            raise AssertionError(f'independent RUP validation failed idx={idx}: missing final empty clause')
-        for j,c in enumerate(additions,1):
-            if not check_rup.rup(db,c):
-                raise AssertionError(f'independent RUP validation failed idx={idx} proof_clause={j}: {c}')
-            db.append(c)
+        ok, message = check_rup.verify_proof(list(check_rup.parse_cnf(cnf)), proof)
+        if not ok: raise AssertionError(f'independent RUP validation failed idx={idx}: {message}')
 
 
 def main():
@@ -70,3 +65,4 @@ def main():
     print(f'PASS: {idx} formulas classified correctly with independent SAT/RUP validation')
     return 0
 if __name__=='__main__': raise SystemExit(main())
+

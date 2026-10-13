@@ -66,6 +66,9 @@ jobs:
             --verification-time-limit 300 \
             --memory-gib 4 \
             --output benchmarks/results/acceptance.json
+      - name: Original Core-v2 adoption target and separate comparative verdict
+        if: github.ref_name == 'fit/satsolv-core-v3'
+        run: python3 tools/core_v3_gate.py benchmarks/results/acceptance.json
       - name: Generate comparison table
         if: always()
         run: test ! -f benchmarks/results/acceptance.json || python3 tools/report_benchmark.py benchmarks/results/acceptance.json benchmarks/results/acceptance.md
@@ -80,3 +83,4 @@ jobs:
           if-no-files-found: warn
 
 # R7/Core-v2 acceptance run: solver budget and independent proof-verification budget are explicit and fail closed.
+

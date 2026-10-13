@@ -6,12 +6,22 @@
 #include <stdexcept>
 
 namespace satsolv {
+namespace {
+std::uint64_t seed_hash(std::uint64_t x) noexcept {
+    x += 0x9e3779b97f4a7c15ULL;
+    x = (x ^ (x >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+    x = (x ^ (x >> 27U)) * 0x94d049bb133111ebULL;
+    return x ^ (x >> 31U);
+}
+}
+
 
 Solver::Solver(SolverConfig config) : config_(config) {
     if (!(config_.var_decay > 0.0 && config_.var_decay < 1.0)) {
         throw std::invalid_argument("var_decay must be in (0,1)");
     }
-    if (config_.restart_base <= 0 || config_.reduce_interval <= 0 || config_.time_limit_seconds < 0.0) {
+    if (!(config_.clause_decay > 0.0 && config_.clause_decay <= 1.0)) throw std::invalid_argument("clause_decay must be in (0,1]");
+    if (config_.restart_base <= 0 || config_.reduce_interval <= 0 || !std::isfinite(config_.time_limit_seconds) || config_.time_limit_seconds < 0.0) {
         throw std::invalid_argument("invalid solver configuration");
     }
 }
@@ -57,6 +67,10 @@ void Solver::reset(int variables) {
     nvars_ = variables;
     stats_ = {};
     clauses_.clear();
+    learnt_ids_.clear();
+    dead_descriptors_ = 0;
+    proof_buffer_.clear();
+    proof_buffer_.reserve(65536);
     literal_arena_.clear();
     dead_literals_ = 0;
     watches_.assign(static_cast<std::size_t>(2 * variables), {});
@@ -68,10 +82,14 @@ void Solver::reset(int variables) {
     trail_lim_.clear();
     qhead_ = 0;
     activity_.assign(static_cast<std::size_t>(variables + 1), 0.0);
-    heap_stamp_.assign(static_cast<std::size_t>(variables + 1), 0);
+    heap_rank_.resize(static_cast<std::size_t>(variables + 1));
+    decision_enabled_.assign(static_cast<std::size_t>(variables + 1), 1);
+    for (int v = 1; v <= variables; ++v)
+        heap_rank_[static_cast<std::size_t>(v)] = config_.seed == 1 ? static_cast<std::uint64_t>(v) : seed_hash(config_.seed ^ static_cast<std::uint64_t>(v));
     saved_phase_.assign(static_cast<std::size_t>(variables + 1), static_cast<std::int8_t>(1));
-    order_heap_ = {};
+    order_heap_.reset(activity_, heap_rank_);
     var_inc_ = 1.0;
+    clause_inc_ = 1.0;
 
     analyze_seen_.assign(static_cast<std::size_t>(variables + 1), 0);
     analyze_touched_.clear();
@@ -88,7 +106,8 @@ void Solver::reset(int variables) {
     conflicts_since_restart_ = 0;
     next_restart_ = static_cast<std::uint64_t>(config_.restart_base) * luby(restart_index_);
     for (int v = 1; v <= variables; ++v) {
-        order_heap_.push(HeapEntry{0.0, v, 0});
+        if (config_.seed != 1) saved_phase_[static_cast<std::size_t>(v)] = static_cast<std::int8_t>(seed_hash(heap_rank_[static_cast<std::size_t>(v)]) & 1ULL);
+        order_heap_.update(v);
     }
 }
 
@@ -130,6 +149,7 @@ int Solver::add_clause(const std::vector<int>& input, bool learnt, int lbd) {
     clause.lbd = lbd;
     literal_arena_.insert(literal_arena_.end(), source->begin(), source->end());
     clauses_.push_back(clause);
+    if (learnt) learnt_ids_.push_back(cid);
 
     Clause& stored = clauses_.back();
     if (stored.size == 0) {
@@ -184,8 +204,7 @@ int Solver::propagate() {
 
         const auto& binary = binary_watches_[false_index];
         for (const BinaryWatcher& watcher : binary) {
-            const Clause& c = clauses_[static_cast<std::size_t>(watcher.clause)];
-            if (c.deleted) continue;
+            // Binary clauses are never reduced; the watcher is the implication.
             const int value = value_lit(watcher.implied);
             if (value == 0) return watcher.clause;
             if (value < 0 && !enqueue(watcher.implied, watcher.clause)) return watcher.clause;
@@ -194,16 +213,17 @@ int Solver::propagate() {
         auto& ws = watches_[false_index];
         std::size_t i = 0;
         while (i < ws.size()) {
+            if (config_.telemetry) ++stats_.watch_visits;
+            if (value_lit(ws[i].blocker) == 1) {
+                if (config_.telemetry) ++stats_.blocker_hits;
+                ++i;
+                continue;
+            }
             const int cid = ws[i].clause;
             Clause& c = clauses_[static_cast<std::size_t>(cid)];
             if (c.deleted) {
                 ws[i] = ws.back();
                 ws.pop_back();
-                continue;
-            }
-
-            if (value_lit(ws[i].blocker) == 1) {
-                ++i;
                 continue;
             }
 
@@ -275,8 +295,7 @@ void Solver::cancel_until(int level) {
         assigns_[static_cast<std::size_t>(v)] = -1;
         levels_[static_cast<std::size_t>(v)] = 0;
         reasons_[static_cast<std::size_t>(v)] = -1;
-        ++heap_stamp_[static_cast<std::size_t>(v)];
-        order_heap_.push(HeapEntry{activity_[static_cast<std::size_t>(v)], v, heap_stamp_[static_cast<std::size_t>(v)]});
+        if (decision_enabled_[static_cast<std::size_t>(v)] != 0) order_heap_.update(v);
     }
     trail_.resize(target);
     trail_lim_.resize(static_cast<std::size_t>(level));
@@ -285,19 +304,9 @@ void Solver::cancel_until(int level) {
 
 int Solver::pick_branch_lit() {
     while (!order_heap_.empty()) {
-        const HeapEntry top = order_heap_.top();
-        order_heap_.pop();
-        const int v = top.variable;
-        if (assigns_[static_cast<std::size_t>(v)] != -1) continue;
-        if (top.stamp != heap_stamp_[static_cast<std::size_t>(v)]) continue;
-        const double current = activity_[static_cast<std::size_t>(v)];
-        const double tolerance = std::max(1.0, std::abs(current)) * 1e-12;
-        if (std::abs(top.activity - current) > tolerance) continue;
-        const bool positive = saved_phase_[static_cast<std::size_t>(v)] != 0;
-        return positive ? v : -v;
-    }
-    for (int v = 1; v <= nvars_; ++v) {
-        if (assigns_[static_cast<std::size_t>(v)] == -1) return v;
+        const int v = order_heap_.pop();
+        if (assigns_[static_cast<std::size_t>(v)] != -1 || decision_enabled_[static_cast<std::size_t>(v)] == 0) continue;
+        return saved_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
     }
     return 0;
 }
@@ -305,29 +314,26 @@ int Solver::pick_branch_lit() {
 void Solver::rescale_activities() {
     for (int v = 1; v <= nvars_; ++v) activity_[static_cast<std::size_t>(v)] *= 1e-100;
     var_inc_ *= 1e-100;
-    order_heap_ = {};
-    for (int v = 1; v <= nvars_; ++v) {
-        ++heap_stamp_[static_cast<std::size_t>(v)];
-        order_heap_.push(HeapEntry{activity_[static_cast<std::size_t>(v)], v, heap_stamp_[static_cast<std::size_t>(v)]});
-    }
+    order_heap_.rebuild();
 }
 
 void Solver::bump_variable(int variable) {
-    const std::size_t heap_limit = std::max<std::size_t>(4096U, static_cast<std::size_t>(nvars_ + 1) * 4U);
-    if (order_heap_.size() > heap_limit) {
-        order_heap_ = {};
-        for (int v = 1; v <= nvars_; ++v) {
-            order_heap_.push(HeapEntry{activity_[static_cast<std::size_t>(v)], v, heap_stamp_[static_cast<std::size_t>(v)]});
-        }
-    }
     activity_[static_cast<std::size_t>(variable)] += var_inc_;
     if (activity_[static_cast<std::size_t>(variable)] > 1e100) rescale_activities();
-    ++heap_stamp_[static_cast<std::size_t>(variable)];
-    order_heap_.push(HeapEntry{activity_[static_cast<std::size_t>(variable)], variable, heap_stamp_[static_cast<std::size_t>(variable)]});
+    if (decision_enabled_[static_cast<std::size_t>(variable)] != 0) order_heap_.update(variable);
+    if (config_.telemetry) {
+        ++stats_.heap_updates;
+        stats_.peak_heap_entries = std::max(stats_.peak_heap_entries, static_cast<std::uint64_t>(order_heap_.size()));
+    }
 }
 
 void Solver::decay_activities() {
     var_inc_ /= config_.var_decay;
+    clause_inc_ /= config_.clause_decay;
+    if (clause_inc_ > 1e100) {
+        for (int cid : learnt_ids_) clauses_[static_cast<std::size_t>(cid)].activity *= 1e-100;
+        clause_inc_ *= 1e-100;
+    }
 }
 
 int Solver::compute_lbd(const std::vector<int>& clause) {
@@ -379,7 +385,8 @@ void Solver::minimize_clause(std::vector<int>& clause) {
                     found_pivot = true;
                     continue;
                 }
-                if (literal_marks_[static_cast<std::size_t>(lit_index(r))] != literal_epoch_) {
+                if (levels_[static_cast<std::size_t>(var(r))] != 0 &&
+                    literal_marks_[static_cast<std::size_t>(lit_index(r))] != literal_epoch_) {
                     removable = false;
                     break;
                 }
@@ -394,6 +401,26 @@ void Solver::minimize_clause(std::vector<int>& clause) {
         }
     }
 
+    if (config_.binary_minimize) {
+        std::uint64_t budget = config_.binary_minimize_budget;
+        std::size_t out = 1;
+        for (std::size_t i = 1; i < minimize_scratch_.size(); ++i) {
+            const int q = minimize_scratch_[i];
+            bool removable = false;
+            for (const auto& edge : binary_watches_[static_cast<std::size_t>(lit_index(-q))]) {
+                if (budget == 0) break;
+                --budget; ++stats_.binary_edges_scanned;
+                if (edge.implied != q && literal_marks_[static_cast<std::size_t>(lit_index(edge.implied))] == literal_epoch_) {
+                    removable = true; break;
+                }
+            }
+            if (removable) {
+                literal_marks_[static_cast<std::size_t>(lit_index(q))] = 0;
+                ++stats_.binary_literals_removed;
+            } else minimize_scratch_[out++] = q;
+        }
+        minimize_scratch_.resize(out);
+    }
     clause.assign(minimize_scratch_.begin(), minimize_scratch_.end());
 }
 
@@ -411,7 +438,7 @@ void Solver::analyze(int conflict_clause, std::vector<int>& learnt, int& backtra
         if (cid < 0) throw std::logic_error("conflict analysis reached decision without resolving UIP");
         Clause& c = clauses_[static_cast<std::size_t>(cid)];
         if (c.deleted) throw std::logic_error("conflict analysis reached deleted clause");
-        c.activity += 1.0;
+        if (c.learnt) c.activity += clause_inc_;
 
         for (std::size_t i = 0; i < static_cast<std::size_t>(c.size); ++i) {
             const int q = clause_lit(c, i);
@@ -459,88 +486,109 @@ bool Solver::clause_locked(int cid) const noexcept {
 }
 
 void Solver::compact_clause_arena() {
-    if (dead_literals_ == 0) return;
-
-    std::vector<int> compact;
-    const std::size_t live_literals = literal_arena_.size() >= dead_literals_ ? literal_arena_.size() - dead_literals_ : 0;
-    compact.reserve(live_literals);
-
-    for (Clause& c : clauses_) {
-        if (c.deleted) {
-            c.offset = 0;
-            c.size = 0;
-            c.scan_cursor = 2;
-            continue;
-        }
-        const std::size_t old_offset = c.offset;
-        c.offset = compact.size();
-        for (std::size_t i = 0; i < static_cast<std::size_t>(c.size); ++i) {
-            compact.push_back(literal_arena_[old_offset + i]);
-        }
+    if (dead_descriptors_ == 0) return;
+    std::vector<int> remap(clauses_.size(), -1);
+    std::vector<Clause> compact_clauses;
+    std::vector<int> compact_literals;
+    compact_clauses.reserve(clauses_.size() - dead_descriptors_);
+    compact_literals.reserve(literal_arena_.size() - dead_literals_);
+    stats_.descriptor_scans += clauses_.size();
+    for (std::size_t cid = 0; cid < clauses_.size(); ++cid) {
+        const Clause& c = clauses_[cid];
+        if (c.deleted) continue;
+        remap[cid] = static_cast<int>(compact_clauses.size());
+        Clause copy = c; copy.offset = compact_literals.size();
+        compact_literals.insert(compact_literals.end(), literal_arena_.begin() + static_cast<std::ptrdiff_t>(c.offset),
+                                literal_arena_.begin() + static_cast<std::ptrdiff_t>(c.offset + c.size));
+        compact_clauses.push_back(copy);
     }
-
-    literal_arena_.swap(compact);
-    dead_literals_ = 0;
+    // Remove stale watches before IDs can be reused. Preserve live watch order.
+    for (auto& list : watches_) {
+        std::size_t out = 0;
+        for (auto w : list) if (remap[static_cast<std::size_t>(w.clause)] >= 0) {
+            w.clause = remap[static_cast<std::size_t>(w.clause)]; list[out++] = w;
+        }
+        list.resize(out);
+    }
+    for (auto& list : binary_watches_) for (auto& w : list) {
+        w.clause = remap[static_cast<std::size_t>(w.clause)];
+        if (w.clause < 0) throw std::logic_error("deleted binary clause during compaction");
+    }
+    for (int& reason : reasons_) if (reason >= 0) {
+        reason = remap[static_cast<std::size_t>(reason)];
+        if (reason < 0) throw std::logic_error("deleted locked reason during compaction");
+    }
+    for (int& cid : learnt_ids_) cid = remap[static_cast<std::size_t>(cid)];
+    clauses_.swap(compact_clauses); literal_arena_.swap(compact_literals);
+    dead_literals_ = 0; dead_descriptors_ = 0; ++stats_.descriptor_compactions;
 }
 
 void Solver::reduce_database() {
     std::vector<int> candidates;
-    for (int cid = 0; cid < static_cast<int>(clauses_.size()); ++cid) {
+    candidates.reserve(learnt_ids_.size());
+    stats_.descriptor_scans += learnt_ids_.size();
+    for (int cid : learnt_ids_) {
         const Clause& c = clauses_[static_cast<std::size_t>(cid)];
-        if (!c.learnt || c.deleted || c.size <= 2 || c.lbd <= 2 || clause_locked(cid)) continue;
+        if (c.size <= 2 || c.lbd <= 2 || clause_locked(cid)) continue;
         candidates.push_back(cid);
     }
-
     std::sort(candidates.begin(), candidates.end(), [this](int a, int b) {
         const Clause& ca = clauses_[static_cast<std::size_t>(a)];
         const Clause& cb = clauses_[static_cast<std::size_t>(b)];
         if (ca.lbd != cb.lbd) return ca.lbd > cb.lbd;
         if (ca.activity != cb.activity) return ca.activity < cb.activity;
-        return ca.size > cb.size;
+        if (ca.size != cb.size) return ca.size > cb.size;
+        return a < b;
     });
-
-    const std::size_t remove_count = candidates.size() / 2;
-    for (std::size_t i = 0; i < remove_count; ++i) {
+    std::vector<int> deleted;
+    for (std::size_t i = 0; i < candidates.size()/2; ++i) {
         Clause& c = clauses_[static_cast<std::size_t>(candidates[i])];
-        if (c.reason_refs != 0) continue;
-        c.deleted = true;
-        dead_literals_ += static_cast<std::size_t>(c.size);
+        if (c.reason_refs != 0) throw std::logic_error("attempted deletion of locked reason");
+        if (proof_enabled_) {
+            deleted.clear();
+            for (std::size_t k = 0; k < c.size; ++k) deleted.push_back(clause_lit(c, k));
+            log_record(deleted, true);
+        }
+        c.deleted = true; ++dead_descriptors_; dead_literals_ += c.size;
         ++stats_.deleted_learnt_clauses;
     }
-
-    const std::size_t compact_floor = 4096;
-    if (dead_literals_ >= compact_floor && dead_literals_ >= literal_arena_.size() / 4) {
-        compact_clause_arena();
-    }
+    learnt_ids_.erase(std::remove_if(learnt_ids_.begin(), learnt_ids_.end(), [this](int cid) {
+        return clauses_[static_cast<std::size_t>(cid)].deleted;
+    }), learnt_ids_.end());
+    if (dead_descriptors_ >= 4096 && (dead_descriptors_ >= clauses_.size()/4 || dead_literals_ >= literal_arena_.size()/4)) compact_clause_arena();
 }
 
-void Solver::write_binary_literal(std::ofstream& out, int lit, std::uint64_t& byte_counter) {
+void Solver::flush_proof() {
+    if (proof_buffer_.empty()) return;
+    proof_.write(proof_buffer_.data(), static_cast<std::streamsize>(proof_buffer_.size()));
+    if (!proof_) throw std::runtime_error("proof output write failed");
+    proof_buffer_.clear();
+}
+
+void Solver::append_proof_byte(char byte) {
+    if (proof_buffer_.size() >= 65536) flush_proof();
+    proof_buffer_.push_back(byte); ++stats_.proof_bytes;
+}
+
+void Solver::write_binary_literal(int lit) {
     const std::uint64_t magnitude = static_cast<std::uint64_t>(lit < 0 ? -static_cast<std::int64_t>(lit) : lit);
-    std::uint64_t code = 2ULL * magnitude + (lit < 0 ? 1ULL : 0ULL);
+    std::uint64_t code = 2ULL*magnitude + (lit < 0 ? 1ULL : 0ULL);
     do {
-        unsigned char byte = static_cast<unsigned char>(code & 0x7fU);
-        code >>= 7U;
-        if (code != 0U) byte = static_cast<unsigned char>(byte | 0x80U);
-        out.put(static_cast<char>(byte));
-        ++byte_counter;
-    } while (code != 0U);
+        auto byte = static_cast<unsigned char>(code & 0x7fU); code >>= 7U;
+        if (code != 0) byte = static_cast<unsigned char>(byte | 0x80U);
+        append_proof_byte(static_cast<char>(byte));
+    } while (code != 0);
 }
 
-void Solver::log_clause(const std::vector<int>& clause) {
+void Solver::log_record(const std::vector<int>& clause, bool deletion) {
     if (!proof_enabled_) return;
-    proof_.put('a');
-    ++stats_.proof_bytes;
-    for (int lit : clause) write_binary_literal(proof_, lit, stats_.proof_bytes);
-    proof_.put('\0');
-    ++stats_.proof_bytes;
+    append_proof_byte(deletion ? 'd' : 'a');
+    for (int lit : clause) write_binary_literal(lit);
+    append_proof_byte('\0');
+    if (proof_buffer_.size() >= 65536) flush_proof();
 }
-
-void Solver::log_empty() {
-    if (!proof_enabled_) return;
-    proof_.put('a');
-    proof_.put('\0');
-    stats_.proof_bytes += 2;
-}
+void Solver::log_clause(const std::vector<int>& clause) { log_record(clause, false); }
+void Solver::log_empty() { log_record({}, false); }
 
 std::uint64_t Solver::luby(std::uint64_t index) {
     std::uint64_t size = 1;
@@ -558,17 +606,9 @@ std::uint64_t Solver::luby(std::uint64_t index) {
 }
 
 SolveOutput Solver::solve(const Formula& formula, const std::optional<std::filesystem::path>& proof_path) {
+    if (proof_.is_open()) proof_.close();
+    proof_.clear(); proof_enabled_ = false;
     reset(formula.variables);
-
-    std::size_t initial_literals = 0;
-    for (const auto& clause : formula.clauses) {
-        if (clause.size() > std::numeric_limits<std::size_t>::max() - initial_literals) {
-            throw std::length_error("formula literal count overflow");
-        }
-        initial_literals += clause.size();
-    }
-    literal_arena_.reserve(initial_literals + initial_literals / 4 + 1024);
-    clauses_.reserve(formula.clauses.size() + 1024);
 
     if (proof_path) {
         proof_.open(*proof_path, std::ios::out | std::ios::trunc | std::ios::binary);
@@ -579,7 +619,33 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     }
     start_time_ = std::chrono::steady_clock::now();
 
-    for (const auto& clause : formula.clauses) {
+    SimplifyResult simplified;
+    const Formula* input = &formula;
+    if (config_.simplify) {
+        simplified = simplify_formula(formula, config_.simplify_budget,
+            [this](const std::vector<int>& clause) { log_clause(clause); },
+            [this]() { return timed_out(); });
+        if (simplified.applied) {
+            input = &simplified.formula;
+            stats_.simplified_literals = simplified.removed_literals;
+            stats_.eliminated_variables = simplified.eliminations.size();
+            stats_.subsumed_clauses = simplified.subsumed;
+            stats_.probed_units = simplified.probed_units;
+            stats_.vivified_clauses = simplified.vivified;
+            for (const auto& e : simplified.eliminations) decision_enabled_[static_cast<std::size_t>(e.variable)] = 0;
+        }
+    }
+    std::size_t initial_literals = 0;
+    for (const auto& clause : input->clauses) {
+        if (clause.size() > std::numeric_limits<std::size_t>::max() - initial_literals) {
+            throw std::length_error("formula literal count overflow");
+        }
+        initial_literals += clause.size();
+    }
+    literal_arena_.reserve(initial_literals + initial_literals / 4 + 1024);
+    clauses_.reserve(input->clauses.size() + 1024);
+
+    for (const auto& clause : input->clauses) {
         const int cid = add_clause(clause, false);
         if (cid >= 0) {
             const Clause& stored = clauses_[static_cast<std::size_t>(cid)];
@@ -591,9 +657,9 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
         if (root_unsat_) break;
     }
 
-    order_heap_ = {};
+    order_heap_.reset(activity_, heap_rank_);
     for (int v = 1; v <= nvars_; ++v) {
-        order_heap_.push(HeapEntry{activity_[static_cast<std::size_t>(v)], v, heap_stamp_[static_cast<std::size_t>(v)]});
+        if (decision_enabled_[static_cast<std::size_t>(v)] != 0) order_heap_.update(v);
     }
 
     SolveOutput output;
@@ -677,14 +743,20 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
         }
     }
 
-    stats_.solve_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time_).count();
+    if (output.result == SolveResult::Sat && simplified.applied) extend_model(output.model, simplified.eliminations);
     if (proof_enabled_) {
-        proof_.flush();
+        flush_proof(); proof_.flush();
+        if (!proof_) throw std::runtime_error("proof output flush failed");
         proof_.close();
+        if (proof_.fail()) throw std::runtime_error("proof output close failed");
         proof_enabled_ = false;
     }
+    stats_.clause_descriptors = clauses_.size();
+    stats_.live_clauses = clauses_.size() - dead_descriptors_;
+    stats_.solve_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time_).count();
     output.stats = stats_;
     return output;
 }
 
 } // namespace satsolv
+

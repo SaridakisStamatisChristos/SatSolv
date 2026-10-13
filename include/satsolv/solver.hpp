@@ -1,6 +1,8 @@
 #pragma once
 
 #include "satsolv/parser.hpp"
+#include "satsolv/indexed_heap.hpp"
+#include "satsolv/simplifier.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -22,6 +24,13 @@ struct SolverConfig {
     int restart_base = 100;
     int reduce_interval = 2000;
     double var_decay = 0.95;
+    double clause_decay = 0.999;
+    bool binary_minimize = true;
+    bool simplify = true;
+    bool telemetry = false;
+    std::uint64_t binary_minimize_budget = 128;
+    std::uint64_t simplify_budget = 1000000;
+
 };
 
 struct SolverStats {
@@ -34,6 +43,22 @@ struct SolverStats {
     std::uint64_t deleted_learnt_clauses = 0;
     std::size_t max_trail = 0;
     std::uint64_t proof_bytes = 0;
+    std::uint64_t watch_visits = 0;
+    std::uint64_t blocker_hits = 0;
+    std::uint64_t descriptor_scans = 0;
+    std::uint64_t descriptor_compactions = 0;
+    std::uint64_t heap_updates = 0;
+    std::uint64_t peak_heap_entries = 0;
+    std::uint64_t binary_edges_scanned = 0;
+    std::uint64_t binary_literals_removed = 0;
+    std::uint64_t simplified_literals = 0;
+    std::uint64_t eliminated_variables = 0;
+    std::uint64_t subsumed_clauses = 0;
+    std::uint64_t probed_units = 0;
+    std::uint64_t vivified_clauses = 0;
+    std::uint64_t live_clauses = 0;
+    std::uint64_t clause_descriptors = 0;
+
 };
 
 struct SolveOutput {
@@ -69,23 +94,12 @@ private:
         int implied = 0;
     };
 
-    struct HeapEntry {
-        double activity;
-        int variable;
-        std::uint64_t stamp;
-    };
-    struct HeapLess {
-        bool operator()(const HeapEntry& a, const HeapEntry& b) const noexcept {
-            if (a.activity != b.activity) return a.activity < b.activity;
-            if (a.variable != b.variable) return a.variable > b.variable;
-            return a.stamp < b.stamp;
-        }
-    };
-
     SolverConfig config_;
     SolverStats stats_{};
     int nvars_ = 0;
     std::vector<Clause> clauses_;
+    std::vector<int> learnt_ids_;
+    std::size_t dead_descriptors_ = 0;
     std::vector<int> literal_arena_;
     std::size_t dead_literals_ = 0;
     std::vector<std::vector<Watcher>> watches_;
@@ -97,10 +111,12 @@ private:
     std::vector<std::size_t> trail_lim_;
     std::size_t qhead_ = 0;
     std::vector<double> activity_;
-    std::vector<std::uint64_t> heap_stamp_;
+    std::vector<std::uint64_t> heap_rank_;
+    std::vector<std::uint8_t> decision_enabled_;
     std::vector<std::int8_t> saved_phase_;
-    std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapLess> order_heap_;
+    IndexedHeap order_heap_;
     double var_inc_ = 1.0;
+    double clause_inc_ = 1.0;
 
     std::vector<std::uint8_t> analyze_seen_;
     std::vector<int> analyze_touched_;
@@ -111,6 +127,7 @@ private:
     std::vector<int> minimize_scratch_;
 
     std::ofstream proof_;
+    std::vector<char> proof_buffer_;
     bool proof_enabled_ = false;
     bool root_unsat_ = false;
     std::chrono::steady_clock::time_point start_time_{};
@@ -143,10 +160,14 @@ private:
     void compact_clause_arena();
     void log_clause(const std::vector<int>& clause);
     void log_empty();
-    static void write_binary_literal(std::ofstream& out, int lit, std::uint64_t& byte_counter);
+    void log_record(const std::vector<int>& clause, bool deletion);
+    void flush_proof();
+    void append_proof_byte(char byte);
+    void write_binary_literal(int lit);
     static std::uint64_t luby(std::uint64_t index);
 };
 
 std::string result_name(SolveResult result);
 
 } // namespace satsolv
+
