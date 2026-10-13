@@ -1,0 +1,83 @@
+name: Core v3 A/B and Ablations
+
+on:
+  push:
+    branches: ['fit/satsolv-core-v3']
+    paths: ['src/**', 'include/**', 'tests/**', 'tools/**', 'CMakeLists.txt', '.github/workflows/core-v3-ab.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build exact Core v2 and candidate
+        run: |
+          git worktree add --detach /tmp/core-v2 b11f47060b99815620569e5fe2ad6b8071e5db01
+          cmake -S /tmp/core-v2 -B /tmp/core-v2/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/core-v2/build -j2
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+      - name: Build pinned external verifier and Kissat
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout f7e57764c19cf35198830575492dc9d80e872b55
+          cd /tmp/kissat && ./configure && make -j2
+      - name: Externally certify feature matrix and real compaction
+        run: python3 tools/core_v3_check.py build/satsolv --cases 200 --drat-trim /tmp/drat-trim-bin
+      - name: Prepare frozen diagnostic inputs and ablation wrappers
+        run: |
+          python3 - <<'PY'
+          import json, shlex
+          from pathlib import Path
+          wanted = {'clqcolor-08-06-07.shuffled-as.sat05-1257.cnf', 'rbsat-v760c43649gyes10.cnf', 'vmpc_28.shuffled-as.sat05-1957.cnf', 'or_randxor_k3_n520_m520.cnf', 'mchess16-mixed-35percent-blocked.cnf', 'posixpath__joinrealpath_13.cnf', 'rand_net70-40-10.shuffled.cnf', 'stb_792_333.apx_1_DS-ST.cnf', 'brent_69_0.05.cnf', 'SAT_dat.k10.cnf'}
+          src = json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          rows = [r for r in src['instances'] if r['name'] in wanted]
+          if len(rows) != 10: raise SystemExit('diagnostic manifest incomplete')
+          Path('/tmp/core-v3-manifest.json').write_text(json.dumps({'count':len(rows),'instances':rows},indent=2)+'\n')
+          modes = {'engine-only':['--no-simplify','--no-binary-minimize','--no-clause-decay'], 'full':[], 'no-simplify':['--no-simplify'], 'no-minimize':['--no-binary-minimize'], 'no-decay':['--no-clause-decay']}
+          binary = str(Path('build/satsolv').resolve())
+          for mode, flags in modes.items():
+              p = Path('/tmp')/('satsolv-'+mode)
+              p.write_text('#!/bin/sh\nexec '+shlex.quote(binary)+' "$@" '+shlex.join(flags)+'\n')
+              p.chmod(0o755)
+          Path('benchmarks/results/core-v3').mkdir(parents=True,exist_ok=True)
+          Path('benchmarks/results/core-v3/source-pins.json').write_text(json.dumps({'control':'b11f47060b99815620569e5fe2ad6b8071e5db01','candidate':__import__('subprocess').check_output(['git','rev-parse','HEAD'],text=True).strip(),'modes':modes},indent=2)+'\n')
+          PY
+          python3 tools/fetch_benchmarks.py --manifest /tmp/core-v3-manifest.json --dest benchmarks/cache
+      - name: Certified exact control and candidate ablations
+        run: |
+          for mode in core-v2 engine-only full no-simplify no-minimize no-decay; do
+            binary="/tmp/satsolv-$mode"
+            if [ "$mode" = core-v2 ]; then binary=/tmp/core-v2/build/satsolv; fi
+            python3 tools/benchmark.py --manifest /tmp/core-v3-manifest.json --root benchmarks/cache --satsolv "$binary" --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 180 --memory-gib 4 --output "benchmarks/results/core-v3/$mode.json"
+          done
+      - name: Supplementary proof-enabled Kissat comparison
+        run: |
+          python3 tools/benchmark.py --manifest /tmp/core-v3-manifest.json --root benchmarks/cache --satsolv build/satsolv --kissat /tmp/kissat/build/kissat --kissat-proof --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 180 --memory-gib 4 --output benchmarks/results/core-v3/proof-parity.json
+      - name: Summarize observed results without selecting a new policy
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for p in sorted(Path('benchmarks/results/core-v3').glob('*.json')):
+              d=json.loads(p.read_text())
+              if 'summary' in d: print(p.name, json.dumps({'summary':d['summary'],'certification':d['certification']},sort_keys=True))
+          PY
+      - name: Preserve all results including negative evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-v3-ablation-evidence
+          path: benchmarks/results/core-v3/*.json
+          if-no-files-found: error

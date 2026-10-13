@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Independent RUP checker for SatSolv's proof subset.
 
-SatSolv intentionally emits only RUP additions (a valid DRAT subset) and no
-deletions.  The development oracle accepts both ordinary text DRAT and the
+SatSolv emits RUP additions and explicit learned-clause deletions.
+The oracle applies deletions before validating subsequent additions.  The development oracle accepts both ordinary text DRAT and the
 binary DRAT encoding used by Core v2.  Acceptance still uses external
 ``drat-trim``; this checker is deliberately independent and small enough to
 serve as an exhaustive-test oracle.
@@ -49,14 +49,14 @@ def _parse_text_proof(data: bytes):
         s = raw.strip()
         if not s or s.startswith('c'):
             continue
-        if s.startswith('d '):
-            raise ValueError("development RUP checker does not support deletions")
+        deletion = s.startswith('d ')
+        if deletion: s = s[2:]
         for token in s.split():
             lit = int(token)
             if lit == 0:
                 clause = _canonical_clause(cur)
                 if clause is not None:
-                    clauses.append(clause)
+                    clauses.append((deletion, clause))
                 cur = []
             else:
                 cur.append(lit)
@@ -89,9 +89,7 @@ def _parse_binary_proof(data: bytes):
     while pos < size:
         tag = data[pos]
         pos += 1
-        if tag == ord('d'):
-            raise ValueError("development RUP checker does not support deletions")
-        if tag != ord('a'):
+        if tag not in (ord('a'), ord('d')):
             raise ValueError(f"invalid binary DRAT record tag 0x{tag:02x}")
 
         cur = []
@@ -107,18 +105,38 @@ def _parse_binary_proof(data: bytes):
 
         clause = _canonical_clause(cur)
         if clause is not None:
-            clauses.append(clause)
+            clauses.append((tag == ord('d'), clause))
 
     return clauses
 
 
-def parse_proof(path: Path):
+def parse_records(path: Path):
     data = path.read_bytes()
     # Every binary-DRAT clause is zero-byte terminated. Text DRAT never contains
     # NUL bytes, which makes this discriminator unambiguous for SatSolv output.
     if b'\x00' in data:
         return _parse_binary_proof(data)
     return _parse_text_proof(data)
+
+
+def parse_proof(path: Path):
+    """Compatibility projection of additions; strict validation uses records."""
+    return [c for deletion, c in parse_records(path) if not deletion]
+
+
+def verify_proof(db, path):
+    records = parse_records(path)
+    last_addition = None
+    additions = 0
+    for deletion, clause in records:
+        if deletion:
+            # DRAT deletion of a missing clause is harmless and permitted.
+            if clause in db: db.remove(clause)
+        else:
+            if not rup(db, clause):
+                return False, f'non-RUP addition {additions+1}: {clause}'
+            db.append(clause); last_addition = clause; additions += 1
+    return last_addition == (), f'{additions} RUP additions, deletions applied'
 
 
 def rup(db, clause):
@@ -166,22 +184,12 @@ def main():
     parser.add_argument('proof', type=Path)
     args = parser.parse_args()
 
-    db = list(parse_cnf(args.cnf))
-    proof = parse_proof(args.proof)
-    if not proof:
-        print('FAIL: empty proof')
-        return 1
-    for index, clause in enumerate(proof, 1):
-        if not rup(db, clause):
-            print(f'FAIL: proof clause {index} is not RUP: {clause}')
-            return 1
-        db.append(clause)
-    if proof[-1] != ():
-        print('FAIL: proof does not end with empty clause')
-        return 1
-    print(f'PASS: {len(proof)} RUP additions accepted, including final empty clause')
+    ok, message = verify_proof(list(parse_cnf(args.cnf)), args.proof)
+    print(('PASS: ' if ok else 'FAIL: ') + message)
+    if not ok: return 1
     return 0
 
 
 if __name__ == '__main__':
     raise SystemExit(main())
+

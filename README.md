@@ -99,3 +99,13 @@ Raw schema-4 JSON retains solver commands/stdout/stderr, exit codes, resource ou
 ## Known limitations
 
 The current solver intentionally avoids preprocessing/inprocessing whose proof steps are not implemented. Gzip CNF input is not yet supported. SatSolv is materially behind Kissat on solved-count coverage in the current public benchmark evidence, so performance engineering remains active even though independently checked SAT/UNSAT soundness evidence is strong. Final R7 acceptance additionally requires the hardened schema-4 full-corpus run to close without solver errors, crashes, or verification failures.
+
+
+## Core v3 candidate
+
+This branch starts from exact Core v2 and implements blocker-first propagation,
+indexed EVSIDS, active learned IDs and safe descriptor remapping, buffered binary
+DRAT with deletions, seed diversification, and bounded proof-safe simplification
+and binary minimization. See [design and invariants](docs/core-v3.md) and
+[executed local checks](evidence/core-v3-local.md). Full-corpus performance and
+remote qualification remain required before adoption; no SOTA claim is made.

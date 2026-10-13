@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(SatSolv VERSION 0.1.0 LANGUAGES CXX)
+project(SatSolv VERSION 0.2.0 LANGUAGES CXX)
 
 option(SATSOLV_ENABLE_SANITIZERS "Enable ASan+UBSan" OFF)
 option(SATSOLV_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
@@ -7,6 +7,7 @@ option(SATSOLV_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 add_library(satsolv_core
     src/parser.cpp
     src/solver_v2.cpp
+    src/simplifier.cpp
 )
 target_include_directories(satsolv_core PUBLIC include)
 target_compile_features(satsolv_core PUBLIC cxx_std_20)
@@ -39,7 +40,25 @@ if(BUILD_TESTING)
     target_compile_options(satsolv_unit PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(satsolv_unit PRIVATE -fsanitize=address,undefined)
   endif()
+  if(NOT MSVC)
+    target_compile_options(satsolv_unit PRIVATE -UNDEBUG)
+  else()
+    target_compile_options(satsolv_unit PRIVATE /UNDEBUG)
+  endif()
   add_test(NAME unit COMMAND satsolv_unit)
+  add_executable(satsolv_engine_tests tests/test_engine.cpp)
+  target_link_libraries(satsolv_engine_tests PRIVATE satsolv_core)
+  if(MSVC)
+    target_compile_options(satsolv_engine_tests PRIVATE /UNDEBUG)
+  else()
+    target_compile_options(satsolv_engine_tests PRIVATE -UNDEBUG)
+    if(SATSOLV_ENABLE_SANITIZERS)
+      target_compile_options(satsolv_engine_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+      target_link_options(satsolv_engine_tests PRIVATE -fsanitize=address,undefined)
+    endif()
+  endif()
+  add_test(NAME engine COMMAND satsolv_engine_tests)
 endif()
 
 install(TARGETS satsolv RUNTIME DESTINATION bin)
+
