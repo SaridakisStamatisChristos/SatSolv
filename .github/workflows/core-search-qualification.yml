@@ -1,0 +1,109 @@
+name: Core search qualification
+
+on:
+  push:
+    branches: ['exp/satsolv-core-search']
+    paths: ['src/**', 'include/**', 'tests/**', 'tools/**', 'CMakeLists.txt', '.github/workflows/core-search-qualification.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arm: rank
+            flags: --experimental-rank-lbd
+          - arm: rank-recent-delayed
+            flags: --experimental-rank-lbd --experimental-recent-use --search-warmup 1000000 --search-warmup-seconds 15
+          - arm: target-delayed
+            flags: --experimental-target-phases --search-warmup 1000000 --search-warmup-seconds 15
+          - arm: target-reason-delayed
+            flags: --experimental-target-phases --experimental-reason-bump --search-warmup 1000000 --search-warmup-seconds 15
+          - arm: recent-delayed
+            flags: --experimental-recent-use --search-warmup 1000000 --search-warmup-seconds 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build pinned engine control and structural candidate
+        run: |
+          git worktree add --detach /tmp/structural-control f997df1bec87f045ffa48d16ab50729cd90e9a0e
+          cmake -S /tmp/structural-control -B /tmp/structural-control/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/structural-control/build -j2
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+          printf '%s\n' '#!/bin/sh' 'exec /tmp/structural-control/build/satsolv "$@"' > /tmp/engine-control
+          chmod +x /tmp/engine-control
+          printf '%s\n' '#!/bin/sh' 'exec "$(dirname "$0")/build/satsolv" "$@" ${{ matrix.flags }}' > candidate-search
+          chmod +x candidate-search
+      - name: Build pinned external verifier and comparators
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout f7e57764c19cf35198830575492dc9d80e872b55
+          cd /tmp/kissat && ./configure && make -j2
+      - name: Certify congruence and reconstruction before competitive work
+        run: |
+          python3 tools/congruence_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin
+          python3 tools/core_v3_check.py build/satsolv --cases 200 --drat-trim /tmp/drat-trim-bin
+          python3 tools/vivification_check.py build/satsolv --cases 200 --eliminate --drat-trim /tmp/drat-trim-bin
+          python3 tools/vivification_check.py build/satsolv --cases 100 --combined --drat-trim /tmp/drat-trim-bin
+      - name: Certify new core search policies and reduction pressure
+        run: python3 tools/core_search_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin --pressure
+      - name: Fetch unchanged frozen corpus
+        run: python3 tools/fetch_benchmarks.py --manifest benchmarks/competition_manifest.json --dest benchmarks/cache
+      - name: Certified paired full-corpus engine comparison
+        run: |
+          mkdir -p benchmarks/results/core-search
+          python3 - <<'PY'
+          import hashlib,json,subprocess
+          from pathlib import Path
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          out=Path('benchmarks/results/core-search')
+          pins={'control':'f997df1bec87f045ffa48d16ab50729cd90e9a0e','control_flags':[],'candidate_flags':'${{ matrix.flags }}'.split(),'candidate':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'limits':{'solver_seconds':60,'memory_gib':4,'proof_seconds':300},'ordering':'alternate arms by frozen instance index','binary_sha256':{'control':hashlib.sha256(Path('/tmp/structural-control/build/satsolv').read_bytes()).hexdigest(),'candidate':hashlib.sha256(Path('build/satsolv').read_bytes()).hexdigest()},'manifest_sha256':hashlib.sha256(Path('benchmarks/competition_manifest.json').read_bytes()).hexdigest()}
+          (out/'pins.json').write_text(json.dumps(pins,indent=2)+'\n')
+          for i,item in enumerate(src['instances']):
+              m=Path('/tmp/search-one.json');m.write_text(json.dumps({'instances':[item]}))
+              arms=[('engine-control','/tmp/engine-control'),('candidate','./candidate-search')]
+              if i%2: arms.reverse()
+              for name,binary in arms:
+                  result=out/f'{i:02d}-{name}.json'
+                  subprocess.run(['python3','tools/benchmark.py','--manifest',str(m),'--root','benchmarks/cache','--satsolv',binary,'--drat-trim','/tmp/drat-trim-bin','--time-limit','60','--verification-time-limit','300','--memory-gib','4','--output',str(result)],check=True)
+          summaries={}
+          for name in ('engine-control','candidate'):
+              docs=[json.loads((out/f'{i:02d}-{name}.json').read_text()) for i in range(30)]
+              assert all(d['certification']['passed'] for d in docs)
+              rows=[d['rows'][0] for d in docs]
+              assert [(r['instance'],r['sha256']) for r in rows]==[(r['name'],r['sha256']) for r in src['instances']]
+              summaries[name]={'solved':sum(d['summary']['satsolv']['solved'] for d in docs),'par2':sum(d['summary']['satsolv']['par2'] for d in docs)/30}
+          verdict={'summaries':summaries,'candidate_numerical_adoption':summaries['candidate']['solved']>=9 and summaries['candidate']['par2']<85.12,'paired_non_regression':summaries['candidate']['solved']>=summaries['engine-control']['solved'] and summaries['candidate']['par2']<=summaries['engine-control']['par2'],'statistical_superiority_established':False,'no_lost_control_solves':all(not json.loads((out/f'{i:02d}-engine-control.json').read_text())['rows'][0]['solvers']['satsolv']['verified'] or json.loads((out/f'{i:02d}-candidate.json').read_text())['rows'][0]['solvers']['satsolv']['verified'] for i in range(30))}
+          (out/'verdict.json').write_text(json.dumps(verdict,indent=2)+'\n');print(json.dumps(verdict,indent=2))
+          if not verdict['candidate_numerical_adoption'] or not verdict['paired_non_regression'] or not verdict['no_lost_control_solves']: raise SystemExit('prespecified paired/full-corpus gate failed; preserve evidence and do not merge')
+          PY
+      - name: Supplementary proof-enabled Kissat on structural losses
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          src=json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          wanted={'rand_net70-40-10.shuffled.cnf','or_randxor_k3_n520_m520.cnf','posixpath__joinrealpath_13.cnf','clqcolor-08-06-07.shuffled-as.sat05-1257.cnf','vmpc_28.shuffled-as.sat05-1957.cnf'}
+          rows=[r for r in src['instances'] if r['name'] in wanted];assert len(rows)==5
+          Path('/tmp/search-losses.json').write_text(json.dumps({'instances':rows}))
+          PY
+          python3 tools/benchmark.py --manifest /tmp/search-losses.json --root benchmarks/cache --satsolv ./candidate-search --kissat /tmp/kissat/build/kissat --kissat-proof --drat-trim /tmp/drat-trim-bin --time-limit 15 --verification-time-limit 240 --memory-gib 4 --output benchmarks/results/core-search/proof-parity.json
+      - name: Preserve every completed row and negative result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-search-paired-qualification-${{ matrix.arm }}
+          path: benchmarks/results/core-search/*.json
+          if-no-files-found: error

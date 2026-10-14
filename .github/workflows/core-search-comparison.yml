@@ -1,0 +1,115 @@
+name: Core search comparator benchmark
+
+on:
+  push:
+    branches: ['exp/satsolv-core-search']
+    paths:
+      - benchmarks/competition_manifest.json
+      - src/**
+      - include/**
+      - CMakeLists.txt
+      - tools/benchmark.py
+      - tools/report_benchmark.py
+      - .github/workflows/core-search-comparison.yml
+  workflow_dispatch:
+    inputs:
+      time_limit:
+        description: Per-solver per-instance wall-clock seconds
+        required: true
+        default: '60'
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arm: rank
+            flags: --experimental-rank-lbd
+          - arm: rank-recent-delayed
+            flags: --experimental-rank-lbd --experimental-recent-use --search-warmup 1000000 --search-warmup-seconds 15
+          - arm: target-reason-delayed
+            flags: --experimental-target-phases --experimental-reason-bump --search-warmup 1000000 --search-warmup-seconds 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      SATSOLV_BENCH_TIME_LIMIT: ${{ inputs.time_limit || '60' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require resolved competition manifest
+        run: test -f benchmarks/competition_manifest.json || { echo 'competition_manifest.json is not resolved yet'; exit 2; }
+      - name: Build SatSolv
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j2
+          printf '%s\n' '#!/bin/sh' 'exec "$(dirname "$0")/build/satsolv" "$@" ${{ matrix.flags }}' > candidate-search
+          chmod +x candidate-search
+      - name: Build drat-trim
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Build MiniSat
+        run: |
+          git clone https://github.com/niklasso/minisat.git /tmp/minisat
+          git -C /tmp/minisat checkout eb01ad68b75bb3b34ff8657c37ad6a31faae0fc3
+          export MROOT=/tmp/minisat
+          make -C /tmp/minisat/simp -j2 r CXX="g++ -fpermissive"
+          cp /tmp/minisat/simp/minisat_release /tmp/minisat-bin
+      - name: Build Kissat
+        run: |
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout f7e57764c19cf35198830575492dc9d80e872b55
+          cd /tmp/kissat && ./configure && make -j2
+          cp build/kissat /tmp/kissat-bin
+      - name: Independently certify new policies before timing
+        run: |
+          ctest --test-dir build --output-on-failure
+          python3 tools/core_search_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin
+      - name: Fetch and hash-check benchmark inputs
+        run: python3 tools/fetch_benchmarks.py --manifest benchmarks/competition_manifest.json --dest benchmarks/cache
+      - name: Execute certified comparison
+        run: |
+          python3 tools/benchmark.py \
+            --manifest benchmarks/competition_manifest.json \
+            --root benchmarks/cache \
+            --satsolv ./candidate-search \
+            --minisat /tmp/minisat-bin \
+            --kissat /tmp/kissat-bin --kissat-proof \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit "$SATSOLV_BENCH_TIME_LIMIT" \
+            --verification-time-limit 300 \
+            --memory-gib 4 \
+            --output benchmarks/results/acceptance.json
+      - name: Record certified numerical comparator verdict
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('benchmarks/results/acceptance.json');d=json.loads(p.read_text())
+          assert len(d['rows'])==30 and d['certification']['passed']
+          assert d['environment']['kissat_proof_enabled']
+          s=d['summary'];candidate=s['satsolv']
+          verdict={'summary':s,'candidate_flags':'${{ matrix.flags }}'.split(),'numerically_better_than':{k:candidate['solved']>=s[k]['solved'] and candidate['par2']<s[k]['par2'] for k in ('minisat','kissat')},'statistical_superiority_established':False}
+          Path('benchmarks/results/core-search-verdict.json').write_text(json.dumps(verdict,indent=2)+'\n')
+          print(json.dumps(verdict,indent=2))
+          PY
+      - name: Generate comparison table
+        if: always()
+        run: test ! -f benchmarks/results/acceptance.json || python3 tools/report_benchmark.py benchmarks/results/acceptance.json benchmarks/results/acceptance.md
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-search-comparator-results-${{ matrix.arm }}
+          path: |
+            benchmarks/results/acceptance.json
+            benchmarks/results/acceptance.md
+            benchmarks/results/core-search-verdict.json
+          if-no-files-found: warn
+
+# R7/Core-v2 acceptance run: solver budget and independent proof-verification budget are explicit and fail closed.
+
