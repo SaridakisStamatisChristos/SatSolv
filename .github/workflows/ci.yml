@@ -50,6 +50,8 @@ jobs:
           cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
       - name: Core v3 ablations, model reconstruction and proof after compaction
         run: python3 tools/core_v3_check.py build/satsolv --cases 200 --drat-trim /tmp/drat-trim-bin
+      - name: Structural congruence independent truth/model/RUP and external DRAT
+        run: python3 tools/congruence_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin
       - name: External UNSAT DRAT certification
         shell: bash
         run: |
@@ -107,6 +109,11 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: python3 tools/core_v3_check.py build-asan/satsolv --cases 30
+      - name: Structural congruence under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: python3 tools/congruence_check.py build-asan/satsolv --cases 30
       - name: Randomized checks under sanitizers
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1

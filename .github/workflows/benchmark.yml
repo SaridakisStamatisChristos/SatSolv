@@ -67,7 +67,7 @@ jobs:
             --memory-gib 4 \
             --output benchmarks/results/acceptance.json
       - name: Original Core-v2 adoption target and separate comparative verdict
-        if: github.ref_name == 'fit/satsolv-core-v3'
+        if: github.ref_name == 'fit/satsolv-core-v3' || github.ref_name == 'fit/satsolv-structural-repair'
         run: python3 tools/core_v3_gate.py benchmarks/results/acceptance.json
       - name: Generate comparison table
         if: always()

@@ -109,3 +109,12 @@ DRAT with deletions, seed diversification, and bounded proof-safe simplification
 and binary minimization. See [design and invariants](docs/core-v3.md) and
 [executed local checks](evidence/core-v3-local.md). Full-corpus performance and
 remote qualification remain required before adoption; no SOTA claim is made.
+
+## Structural repair candidate
+
+The default now uses the stronger observed engine-only configuration plus a
+proof-safe binary-SCC/complete-AND congruence pass. Earlier search mechanisms
+remain available through explicit experimental flags. See
+[comparative audit, invariants and executed checks](docs/structural-repair.md).
+Frozen full-corpus paired qualification and comparator runs are required before
+adoption. Main is unchanged; no global superiority claim is made.

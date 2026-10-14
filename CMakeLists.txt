@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(SatSolv VERSION 0.2.0 LANGUAGES CXX)
+project(SatSolv VERSION 0.3.0 LANGUAGES CXX)
 
 option(SATSOLV_ENABLE_SANITIZERS "Enable ASan+UBSan" OFF)
 option(SATSOLV_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
@@ -8,6 +8,7 @@ add_library(satsolv_core
     src/parser.cpp
     src/solver_v2.cpp
     src/simplifier.cpp
+    src/congruence.cpp
 )
 target_include_directories(satsolv_core PUBLIC include)
 target_compile_features(satsolv_core PUBLIC cxx_std_20)
@@ -58,6 +59,18 @@ if(BUILD_TESTING)
     endif()
   endif()
   add_test(NAME engine COMMAND satsolv_engine_tests)
+  add_executable(satsolv_congruence_tests tests/test_congruence.cpp)
+  target_link_libraries(satsolv_congruence_tests PRIVATE satsolv_core)
+  if(MSVC)
+    target_compile_options(satsolv_congruence_tests PRIVATE /UNDEBUG)
+  else()
+    target_compile_options(satsolv_congruence_tests PRIVATE -UNDEBUG)
+    if(SATSOLV_ENABLE_SANITIZERS)
+      target_compile_options(satsolv_congruence_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+      target_link_options(satsolv_congruence_tests PRIVATE -fsanitize=address,undefined)
+    endif()
+  endif()
+  add_test(NAME congruence COMMAND satsolv_congruence_tests)
 endif()
 
 install(TARGETS satsolv RUNTIME DESTINATION bin)

@@ -606,6 +606,14 @@ std::uint64_t Solver::luby(std::uint64_t index) {
 }
 
 SolveOutput Solver::solve(const Formula& formula, const std::optional<std::filesystem::path>& proof_path) {
+    start_time_ = std::chrono::steady_clock::now();
+    if (formula.variables < 0 || formula.variables > std::numeric_limits<int>::max()/2)
+        throw std::invalid_argument("invalid formula variable count");
+    for (const auto& clause : formula.clauses) for (int lit : clause) {
+        const auto magnitude = lit < 0 ? -static_cast<std::int64_t>(lit) : static_cast<std::int64_t>(lit);
+        if (magnitude == 0 || magnitude > formula.variables)
+            throw std::invalid_argument("formula literal outside variable range");
+    }
     if (proof_.is_open()) proof_.close();
     proof_.clear(); proof_enabled_ = false;
     reset(formula.variables);
@@ -617,12 +625,25 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     } else {
         proof_enabled_ = false;
     }
-    start_time_ = std::chrono::steady_clock::now();
-
+    CongruenceResult congruent;
     SimplifyResult simplified;
     const Formula* input = &formula;
+    if (config_.congruence) {
+        congruent = simplify_congruence(formula, config_.congruence_budget,
+            [this](const std::vector<int>& clause) { log_clause(clause); },
+            [this]() { return timed_out(); });
+        stats_.congruence_equivalences = congruent.equivalences;
+        stats_.congruence_and_gates = congruent.and_gates;
+        stats_.congruence_work = congruent.work;
+        stats_.congruence_rounds = congruent.rounds;
+        if (congruent.applied) {
+            input = &congruent.formula;
+            for (int v = 1; v <= nvars_; ++v)
+                if (var(congruent.representatives[static_cast<std::size_t>(v)]) != v) decision_enabled_[static_cast<std::size_t>(v)] = 0;
+        }
+    }
     if (config_.simplify) {
-        simplified = simplify_formula(formula, config_.simplify_budget,
+        simplified = simplify_formula(*input, config_.simplify_budget,
             [this](const std::vector<int>& clause) { log_clause(clause); },
             [this]() { return timed_out(); });
         if (simplified.applied) {
@@ -744,6 +765,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     }
 
     if (output.result == SolveResult::Sat && simplified.applied) extend_model(output.model, simplified.eliminations);
+    if (output.result == SolveResult::Sat && congruent.applied) restore_equivalent_model(output.model, congruent.representatives);
     if (proof_enabled_) {
         flush_proof(); proof_.flush();
         if (!proof_) throw std::runtime_error("proof output flush failed");

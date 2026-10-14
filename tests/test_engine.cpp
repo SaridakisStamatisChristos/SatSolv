@@ -43,7 +43,7 @@ bool satisfies(const satsolv::Formula& f, const std::vector<int>& m) {
 void reconstruction_and_budgets() {
     const auto f = satsolv::parse_dimacs_text("p cnf 7 7\n1 2 0\n-1 3 0\n-2 4 0\n-3 5 0\n-4 6 0\n-5 7 0\n-6 -7 0\n");
     for (std::uint64_t budget : {0ULL, 1ULL, 7ULL, 100ULL, 1000000ULL}) for (std::uint64_t seed : {1ULL, 999ULL}) {
-        satsolv::SolverConfig config; config.seed = seed; config.simplify_budget = budget;
+        satsolv::SolverConfig config; config.seed = seed; config.simplify = true; config.simplify_budget = budget;
         satsolv::Solver solver(config);
         auto out = solver.solve(f);
         assert(out.result == satsolv::SolveResult::Sat); assert(satisfies(f, out.model));
