@@ -41,6 +41,13 @@ void usage(std::ostream& os) {
           "  --experimental-watched-vivify enable bounded watched vivification\n"
           "  --experimental-eliminate enable clause-non-growing bounded resolution\n"
           "  --experimental-dynamic-lbd update learnt quality on reuse\n"
+          "  --experimental-fixed-lbd-tier preserve birth tiers with legacy LBD\n"
+          "  --experimental-rank-lbd rank by antecedent levels; fixed birth tiers\n"
+          "  --experimental-target-phases guide decisions by promising trails\n"
+          "  --experimental-reason-bump bounded reason-side variable activity\n"
+          "  --experimental-recent-use one-round conflict-use clause protection\n"
+          "  --target-window <n>  initial target reset interval (default: 10000)\n"
+          "  --reason-bump-budget <n> maximum inspected reason literals per conflict\n"
           "  --eliminate-budget <n> resolution work limit\n"
           "  --vivify-budget <n>  initial watched-vivification work limit\n"
           "  --experimental-simplify enable previous bounded simplifier\n"
@@ -105,6 +112,18 @@ void write_stats_json(const std::filesystem::path& path,
         << "  \"elimination_attempts\": " << s.elimination_attempts << ",\n"
         << "  \"tautological_resolvents\": " << s.tautological_resolvents << ",\n"
         << "  \"lbd_improvements\": " << s.lbd_improvements << ",\n"
+        << "  \"lbd_tier_crossings\": " << s.lbd_tier_crossings << ",\n"
+        << "  \"reductions\": " << s.reductions << ",\n"
+        << "  \"peak_protected_clauses\": " << s.peak_protected_clauses << ",\n"
+        << "  \"peak_protected_literals\": " << s.peak_protected_literals << ",\n"
+        << "  \"peak_birth_protected_clauses\": " << s.peak_birth_protected_clauses << ",\n"
+        << "  \"recent_use_kept\": " << s.recent_use_kept << ",\n"
+        << "  \"target_captures\": " << s.target_captures << ",\n"
+        << "  \"target_phase_writes\": " << s.target_phase_writes << ",\n"
+        << "  \"target_decisions\": " << s.target_decisions << ",\n"
+        << "  \"target_resets\": " << s.target_resets << ",\n"
+        << "  \"reason_bump_scans\": " << s.reason_bump_scans << ",\n"
+        << "  \"reason_bumps\": " << s.reason_bumps << ",\n"
         << "  \"subsumed_clauses\": " << s.subsumed_clauses << ",\n"
         << "  \"probed_units\": " << s.probed_units << ",\n"
         << "  \"vivified_clauses\": " << s.vivified_clauses << ",\n"
@@ -112,8 +131,15 @@ void write_stats_json(const std::filesystem::path& path,
         << "  \"vivify_work\": " << s.vivify_work << ",\n"
         << "  \"vivify_removed\": " << s.vivify_removed << ",\n"
         << "  \"live_clauses\": " << s.live_clauses << ",\n"
-        << "  \"clause_descriptors\": " << s.clause_descriptors << "\n"
-        << "}\n";
+        << "  \"clause_descriptors\": " << s.clause_descriptors << ",\n";
+    const auto histogram = [&out](const char* name, const auto& bins, bool last) {
+        out << "  \"" << name << "\": [";
+        for (std::size_t i = 0; i < bins.size(); ++i) { if (i != 0) out << ", "; out << bins[i]; }
+        out << (last ? "]\n" : "],\n");
+    };
+    histogram("birth_lbd_histogram", s.birth_lbd_histogram, false);
+    histogram("reuse_score_histogram", s.reuse_score_histogram, true);
+    out << "}\n";
     out.flush();
     if (!out) throw std::runtime_error("stats JSON output failed");
 }
@@ -136,7 +162,7 @@ int main(int argc, char** argv) {
             std::string arg = argv[i];
             if (arg == "--help") { usage(std::cout); return 0; }
             if (arg == "--version") { std::cout << "SatSolv 0.3.0\n"; return 0; }
-            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget") {
+            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget") {
                 if (++i >= argc) throw std::invalid_argument("missing value for " + arg);
                 std::string value = argv[i];
                 if (arg == "--proof") proof = std::filesystem::path(value);
@@ -144,6 +170,8 @@ int main(int argc, char** argv) {
                 else if (arg == "--reduce-interval") config.reduce_interval = integer_option<int>(value, arg);
                 else if (arg == "--vivify-budget") config.vivify_budget = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--eliminate-budget") config.eliminate_budget = integer_option<std::uint64_t>(value, arg);
+                else if (arg == "--target-window") config.target_window = integer_option<std::uint64_t>(value, arg);
+                else if (arg == "--reason-bump-budget") config.reason_bump_budget = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--time-limit") config.time_limit_seconds = time_option(value);
                 else stats_json = std::filesystem::path(value);
                 continue;
@@ -152,6 +180,11 @@ int main(int argc, char** argv) {
             if (arg == "--experimental-watched-vivify") { config.watched_vivify = true; continue; }
             if (arg == "--experimental-eliminate") { config.bounded_eliminate = true; continue; }
             if (arg == "--experimental-dynamic-lbd") { config.dynamic_lbd = true; continue; }
+            if (arg == "--experimental-fixed-lbd-tier") { config.fixed_lbd_tier = true; continue; }
+            if (arg == "--experimental-rank-lbd") { config.rank_lbd = true; continue; }
+            if (arg == "--experimental-target-phases") { config.target_phases = true; continue; }
+            if (arg == "--experimental-reason-bump") { config.reason_bump = true; continue; }
+            if (arg == "--experimental-recent-use") { config.recent_use = true; continue; }
             if (arg == "--experimental-simplify") { config.simplify = true; continue; }
             if (arg == "--experimental-binary-minimize") { config.binary_minimize = true; continue; }
             if (arg == "--experimental-clause-decay") { config.clause_decay = 0.999; continue; }

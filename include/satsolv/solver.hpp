@@ -6,6 +6,7 @@
 #include "satsolv/congruence.hpp"
 
 #include <chrono>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -33,6 +34,13 @@ struct SolverConfig {
     bool watched_vivify = false;
     bool bounded_eliminate = false;
     bool dynamic_lbd = false;
+    bool fixed_lbd_tier = false;
+    bool rank_lbd = false;
+    bool target_phases = false;
+    bool reason_bump = false;
+    bool recent_use = false;
+    std::uint64_t target_window = 10000;
+    std::uint64_t reason_bump_budget = 128;
     std::uint64_t eliminate_budget = 8000000;
     std::uint64_t vivify_budget = 16000000;
     std::uint64_t congruence_budget = 4000000;
@@ -69,6 +77,20 @@ struct SolverStats {
     std::uint64_t elimination_attempts = 0;
     std::uint64_t tautological_resolvents = 0;
     std::uint64_t lbd_improvements = 0;
+    std::uint64_t lbd_tier_crossings = 0;
+    std::uint64_t reductions = 0;
+    std::uint64_t peak_protected_clauses = 0;
+    std::uint64_t peak_protected_literals = 0;
+    std::uint64_t peak_birth_protected_clauses = 0;
+    std::uint64_t recent_use_kept = 0;
+    std::uint64_t target_captures = 0;
+    std::uint64_t target_phase_writes = 0;
+    std::uint64_t target_decisions = 0;
+    std::uint64_t target_resets = 0;
+    std::uint64_t reason_bump_scans = 0;
+    std::uint64_t reason_bumps = 0;
+    std::array<std::uint64_t, 16> birth_lbd_histogram{};
+    std::array<std::uint64_t, 16> reuse_score_histogram{};
     std::uint64_t subsumed_clauses = 0;
     std::uint64_t probed_units = 0;
     std::uint64_t vivified_clauses = 0;
@@ -92,15 +114,18 @@ public:
     SolveOutput solve(const Formula& formula, const std::optional<std::filesystem::path>& proof_path = std::nullopt);
 
 private:
+    friend struct SolverSearchTestAccess;
     struct Clause {
         std::size_t offset = 0;
+        double activity = 0.0;
         std::uint32_t size = 0;
         std::uint32_t scan_cursor = 2;
         std::uint32_t reason_refs = 0;
+        int lbd = 0;
+        int birth_lbd = 0;
         bool learnt = false;
         bool deleted = false;
-        int lbd = 0;
-        double activity = 0.0;
+        bool used = false;
     };
 
     struct Watcher {
@@ -133,6 +158,13 @@ private:
     std::vector<std::uint64_t> heap_rank_;
     std::vector<std::uint8_t> decision_enabled_;
     std::vector<std::int8_t> saved_phase_;
+    std::vector<std::int8_t> target_phase_;
+    std::size_t target_depth_ = 0;
+    std::size_t target_shared_prefix_ = 0;
+    std::uint64_t next_target_reset_ = 0;
+    std::uint64_t target_window_ = 0;
+    std::vector<std::uint64_t> reason_bump_marks_;
+    std::uint64_t reason_bump_epoch_ = 0;
     IndexedHeap order_heap_;
     double var_inc_ = 1.0;
     double clause_inc_ = 1.0;
@@ -178,6 +210,10 @@ private:
     void rescale_activities();
     void analyze(int conflict_clause, std::vector<int>& learnt, int& backtrack);
     int compute_lbd(const std::vector<int>& clause);
+    int compute_antecedent_lbd(const Clause& clause, int implied_variable);
+    bool protected_clause(const Clause& clause) const noexcept;
+    void capture_target();
+    void bump_reason_variables(const std::vector<int>& learnt);
     void minimize_clause(std::vector<int>& clause);
     void reduce_database();
     bool clause_locked(int cid) const noexcept;

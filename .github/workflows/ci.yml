@@ -52,6 +52,8 @@ jobs:
         run: python3 tools/core_v3_check.py build/satsolv --cases 200 --drat-trim /tmp/drat-trim-bin
       - name: Structural congruence independent truth/model/RUP and external DRAT
         run: python3 tools/congruence_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin
+      - name: Core search policy original truth/model/RUP and external DRAT
+        run: python3 tools/core_search_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin --pressure
       - name: Watched vivification, elimination and combined independent certification
         run: |
           python3 tools/vivification_check.py build/satsolv --cases 200 --eliminate --drat-trim /tmp/drat-trim-bin
@@ -93,6 +95,8 @@ jobs:
             sat.out
             benchmarks/results/ci-smoke.json
             benchmarks/results/ci-smoke.md
+            benchmarks/results/core-search-pressure/*.json
+            benchmarks/results/core-search-pressure/*.verification.log
           if-no-files-found: ignore
 
   sanitizers:
@@ -119,6 +123,11 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: python3 tools/congruence_check.py build-asan/satsolv --cases 30
+      - name: Core search policies under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: python3 tools/core_search_check.py build-asan/satsolv --cases 30
       - name: New inprocessing under sanitizers
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
