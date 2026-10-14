@@ -106,6 +106,31 @@ struct SolverSearchTestAccess {
         solver.start_time_ -= std::chrono::seconds(2);
         solver.maybe_activate_search(); assert(solver.search_active_ && solver.stats_.search_activations == 1);
     }
+
+    static void root_probing() {
+        SolverConfig config; config.root_probe = true; config.probe_start = 0;
+        Solver solver(config); solver.reset(4);
+        solver.add_clause({-1, 2}, false); solver.add_clause({-1, 3}, false);
+        solver.add_clause({-2, -3, 4}, false);
+        const auto phases = solver.saved_phase_;
+        assert(solver.probe_database(10000) == -1);
+        assert(solver.stats_.probe_binaries > 0 && solver.stats_.probe_attempts > 0);
+        assert(solver.decision_level() == 0 && solver.trail_.empty());
+        assert(solver.saved_phase_ == phases);
+        for (const auto& c : solver.clauses_) assert(c.reason_refs == 0);
+        solver.reset(4);
+        assert(!solver.probing_ && solver.probe_left_ == 0 && solver.next_probe_ == 0);
+        assert(solver.stats_.probe_attempts == 0 && solver.stats_.probe_binaries == 0);
+        solver.add_clause({-1, 2}, false); solver.add_clause({-1, 3}, false);
+        solver.add_clause({-2, -3, 4}, false);
+        assert(solver.probe_database(1) == -1);
+        assert(solver.stats_.probe_work <= 1 && solver.decision_level() == 0 && solver.trail_.empty());
+        assert(solver.saved_phase_ == phases);
+        const auto f = parse_dimacs_text("p cnf 4 3\n-1 2 0\n-1 3 0\n-2 -3 4 0\n");
+        const auto first = solver.solve(f), second = solver.solve(f);
+        assert(first.result == SolveResult::Sat && second.result == SolveResult::Sat);
+        assert(first.model == second.model && first.stats.probe_binaries == second.stats.probe_binaries);
+    }
 };
 }
 
@@ -114,6 +139,7 @@ int main() {
     satsolv::SolverSearchTestAccess::recent_use_and_locks();
     satsolv::SolverSearchTestAccess::targets_and_reason_budget();
     satsolv::SolverSearchTestAccess::delayed_activation();
+    satsolv::SolverSearchTestAccess::root_probing();
     satsolv::SolverConfig config; config.rank_lbd = config.dynamic_lbd = true;
     bool rejected = false;
     try { satsolv::Solver solver(config); } catch (const std::invalid_argument&) { rejected = true; }

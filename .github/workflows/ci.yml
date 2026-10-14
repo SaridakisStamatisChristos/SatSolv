@@ -33,6 +33,8 @@ jobs:
         run: python3 tools/benchmark_fail_closed_check.py
       - name: Fail-closed benchmark internal-error regression
         run: python3 tools/benchmark_internal_error_check.py
+      - name: Fail-closed blocked campaign and superiority regression
+        run: python3 tools/paired_campaign_check.py
       - name: SAT witness independent validation
         shell: bash
         run: |
@@ -54,6 +56,8 @@ jobs:
         run: python3 tools/congruence_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin
       - name: Core search policy original truth/model/RUP and external DRAT
         run: python3 tools/core_search_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin --pressure
+      - name: Structure-preserving strengthening original truth/model/RUP and external DRAT
+        run: python3 tools/strengthen_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin --pressure
       - name: Watched vivification, elimination and combined independent certification
         run: |
           python3 tools/vivification_check.py build/satsolv --cases 200 --eliminate --drat-trim /tmp/drat-trim-bin
@@ -130,6 +134,11 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: python3 tools/core_search_check.py build-asan/satsolv --cases 30
+      - name: Structure-preserving strengthening under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: python3 tools/strengthen_check.py build-asan/satsolv --cases 30
       - name: New inprocessing under sanitizers
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1

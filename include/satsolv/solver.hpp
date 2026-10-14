@@ -4,6 +4,7 @@
 #include "satsolv/indexed_heap.hpp"
 #include "satsolv/simplifier.hpp"
 #include "satsolv/congruence.hpp"
+#include "satsolv/strengthen.hpp"
 
 #include <chrono>
 #include <array>
@@ -39,6 +40,13 @@ struct SolverConfig {
     bool target_phases = false;
     bool reason_bump = false;
     bool recent_use = false;
+    bool short_ssr = false;
+    bool implication_strengthen = false;
+    bool strengthen_keep_activity = false;
+    bool root_probe = false;
+    std::uint64_t probe_start = 1000000;
+    std::uint64_t probe_budget = 1000000;
+    std::uint64_t strengthen_budget = 8000000;
     std::uint64_t target_window = 10000;
     std::uint64_t reason_bump_budget = 128;
     std::uint64_t search_warmup = 0;
@@ -92,6 +100,15 @@ struct SolverStats {
     std::uint64_t reason_bump_scans = 0;
     std::uint64_t reason_bumps = 0;
     std::uint64_t search_activations = 0;
+    std::uint64_t strengthen_work = 0;
+    std::uint64_t ssr_removed = 0;
+    std::uint64_t implication_removed = 0;
+    std::uint64_t binary_failed_units = 0;
+    std::uint64_t probe_work = 0;
+    std::uint64_t probe_attempts = 0;
+    std::uint64_t probe_rounds = 0;
+    std::uint64_t probe_units = 0;
+    std::uint64_t probe_binaries = 0;
     std::array<std::uint64_t, 16> birth_lbd_histogram{};
     std::array<std::uint64_t, 16> reuse_score_histogram{};
     std::uint64_t subsumed_clauses = 0;
@@ -192,6 +209,9 @@ private:
     int vivify_ignored_ = -1;
     std::uint64_t vivify_left_ = 0;
     std::uint64_t next_vivify_ = 2000;
+    bool probing_ = false;
+    std::uint64_t probe_left_ = 0;
+    std::uint64_t next_probe_ = 1000000;
 
     static int var(int lit) noexcept { return lit < 0 ? -lit : lit; }
     int lit_index(int lit) const noexcept;
@@ -207,6 +227,7 @@ private:
     int propagate();
     template<bool Vivifying> int propagate_impl();
     int vivify_database(std::uint64_t budget);
+    int probe_database(std::uint64_t budget);
     void cancel_until(int level);
     int pick_branch_lit();
     void bump_variable(int variable);

@@ -121,6 +121,7 @@ void Solver::reset(int variables) {
     vivify_ignored_ = -1;
     vivify_left_ = 0;
     next_vivify_ = 2000;
+    probing_ = false; probe_left_ = 0; next_probe_ = config_.probe_start;
     for (int v = 1; v <= variables; ++v) {
         if (config_.seed != 1) saved_phase_[static_cast<std::size_t>(v)] = static_cast<std::int8_t>(seed_hash(heap_rank_[static_cast<std::size_t>(v)]) & 1ULL);
         order_heap_.update(v);
@@ -221,6 +222,11 @@ int Solver::propagate() {
 
 template<bool Vivifying> int Solver::propagate_impl() {
     [[maybe_unused]] const auto charge = [this]() {
+        if (probing_) {
+            if (probe_left_ == 0) return false;
+            --probe_left_; ++stats_.probe_work;
+            return (stats_.probe_work & 1023U) != 0U || !timed_out();
+        }
         if (vivify_left_ == 0) return false;
         --vivify_left_; ++stats_.vivify_work;
         return (stats_.vivify_work & 1023U) != 0U || !timed_out();
@@ -315,6 +321,75 @@ template<bool Vivifying> int Solver::propagate_impl() {
         if ((stats_.propagations & 0x3FFFU) == 0U && timed_out()) return -2;
     }
     return -1;
+}
+
+int Solver::probe_database(std::uint64_t budget) {
+    if (decision_level() != 0) throw std::logic_error("probing requires root level");
+    if (budget == 0 || nvars_ > 200000 || timed_out()) return timed_out() ? -2 : -1;
+    // Propagate root assignments first; otherwise a probe could accidentally
+    // treat a root implication as depending on its temporary assumption.
+    int conflict = propagate();
+    if (conflict != -1) return conflict;
+    ++stats_.probe_rounds;
+    const auto phases = saved_phase_;
+    std::vector<int> candidates;
+    while (!order_heap_.empty() && candidates.size() < 128) {
+        const int v = order_heap_.pop();
+        if (assigns_[static_cast<std::size_t>(v)] < 0 && decision_enabled_[static_cast<std::size_t>(v)] != 0)
+            candidates.push_back(v);
+    }
+    for (int v : candidates) order_heap_.update(v);
+    probe_left_ = budget;
+    std::vector<int> consequences;
+    for (int v : candidates) {
+        for (int sign : {1, -1}) {
+            if (probe_left_ == 0 || timed_out()) break;
+            if (assigns_[static_cast<std::size_t>(v)] >= 0) continue;
+            const int assumption = sign * v;
+            const std::size_t root_end = trail_.size();
+            trail_lim_.push_back(root_end);
+            if (!enqueue(assumption, -1)) throw std::logic_error("invalid probe assumption");
+            ++stats_.probe_attempts;
+            probing_ = true;
+            conflict = propagate_impl<true>();
+            probing_ = false;
+            consequences.clear();
+            if (conflict < 0) {
+                // Every reached consequence is justified even if the work
+                // budget exhausted before its own watches were processed.
+                for (std::size_t i = root_end + 1; i < trail_.size() && consequences.size() < 8; ++i) {
+                    const int implied = trail_[i];
+                    bool present = false;
+                    for (const auto& edge : binary_watches_[static_cast<std::size_t>(lit_index(-assumption))]) {
+                        if (probe_left_ == 0) { present = true; break; }
+                        --probe_left_; ++stats_.probe_work;
+                        if (edge.implied == implied) { present = true; break; }
+                    }
+                    if (!present) consequences.push_back(implied);
+                }
+            }
+            cancel_until(0);
+            // Temporary probes must not rephase the actual search.
+            saved_phase_ = phases;
+            if (conflict >= 0) {
+                const std::vector<int> unit{-assumption};
+                log_clause(unit);
+                const int cid = add_clause(unit, true, 1);
+                ++stats_.learnt_clauses; ++stats_.birth_lbd_histogram[1]; ++stats_.probe_units;
+                if (!enqueue(-assumption, cid)) return cid;
+                conflict = propagate();
+                if (conflict != -1) return conflict;
+            } else {
+                for (int implied : consequences) {
+                    const std::vector<int> binary{-assumption, implied};
+                    log_clause(binary); add_clause(binary, true, 2);
+                    ++stats_.learnt_clauses; ++stats_.birth_lbd_histogram[2]; ++stats_.probe_binaries;
+                }
+            }
+        }
+        if (probe_left_ == 0 || timed_out()) break;
+    }
+    return timed_out() ? -2 : -1;
 }
 
 int Solver::vivify_database(std::uint64_t budget) {
@@ -874,6 +949,8 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     CongruenceResult congruent;
     SimplifyResult simplified;
     SimplifyResult eliminated;
+    StrengthenResult strengthened;
+    std::vector<double> initial_activity;
     const Formula* input = &formula;
     if (config_.congruence) {
         congruent = simplify_congruence(formula, config_.congruence_budget,
@@ -887,6 +964,30 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
             input = &congruent.formula;
             for (int v = 1; v <= nvars_; ++v)
                 if (var(congruent.representatives[static_cast<std::size_t>(v)]) != v) decision_enabled_[static_cast<std::size_t>(v)] = 0;
+        }
+    }
+    if (config_.short_ssr || config_.implication_strengthen) {
+        strengthened = strengthen_short(*input, config_.short_ssr, config_.implication_strengthen,
+            config_.strengthen_budget, [this](const std::vector<int>& clause) { log_clause(clause); },
+            [this]() { return timed_out(); });
+        stats_.strengthen_work = strengthened.work;
+        stats_.ssr_removed = strengthened.ssr_removed;
+        stats_.implication_removed = strengthened.implication_removed;
+        stats_.binary_failed_units = strengthened.failed_units;
+        if (strengthened.applied) {
+            if (config_.strengthen_keep_activity) {
+                // Isolate stronger implications from changed occurrence-based
+                // starting priorities. Match add_clause's dedup/tautology rules.
+                initial_activity.assign(static_cast<std::size_t>(nvars_ + 1), 0.0);
+                for (auto c : input->clauses) {
+                    std::sort(c.begin(), c.end());
+                    c.erase(std::unique(c.begin(), c.end()), c.end());
+                    bool tautology = false;
+                    for (int lit : c) if (std::binary_search(c.begin(), c.end(), -lit)) { tautology = true; break; }
+                    if (!tautology) for (int lit : c) initial_activity[static_cast<std::size_t>(var(lit))] += 1.0;
+                }
+            }
+            input = &strengthened.formula;
         }
     }
     if (config_.bounded_eliminate) {
@@ -928,7 +1029,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
 
     for (const auto& clause : input->clauses) {
         const int cid = add_clause(clause, false);
-        if (cid >= 0) {
+        if (cid >= 0 && initial_activity.empty()) {
             const Clause& stored = clauses_[static_cast<std::size_t>(cid)];
             for (std::size_t i = 0; i < static_cast<std::size_t>(stored.size); ++i) {
                 const int v = var(clause_lit(stored, i));
@@ -938,6 +1039,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
         if (root_unsat_) break;
     }
 
+    if (!initial_activity.empty()) activity_.swap(initial_activity);
     order_heap_.reset(activity_, heap_rank_);
     for (int v = 1; v <= nvars_; ++v) {
         if (decision_enabled_[static_cast<std::size_t>(v)] != 0) order_heap_.update(v);
@@ -949,6 +1051,8 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
         output.result = SolveResult::Unsat;
     } else {
         int conflict = propagate();
+        if (conflict == -1 && config_.root_probe && config_.probe_start == 0)
+            conflict = probe_database(config_.probe_budget);
         if (conflict == -1 && config_.watched_vivify) conflict = vivify_database(config_.vivify_budget);
         if (conflict == -2) {
             output.result = SolveResult::Unknown;
@@ -1014,6 +1118,14 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
                         ++restart_index_;
                         conflicts_since_restart_ = 0;
                         next_restart_ = static_cast<std::uint64_t>(config_.restart_base) * luby(restart_index_);
+                        if (config_.root_probe && stats_.conflicts >= next_probe_) {
+                            const auto limit = std::numeric_limits<std::uint64_t>::max();
+                            const auto increment = std::max<std::uint64_t>(1, next_probe_);
+                            next_probe_ = increment > limit - stats_.conflicts ? limit : stats_.conflicts + increment;
+                            conflict = probe_database(config_.probe_budget);
+                            if (conflict == -2) { output.result = SolveResult::Unknown; break; }
+                            if (conflict >= 0) { log_empty(); output.result = SolveResult::Unsat; break; }
+                        }
                         if (config_.watched_vivify && stats_.conflicts >= next_vivify_) {
                             next_vivify_ *= 2;
                             conflict = propagate();
