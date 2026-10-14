@@ -110,6 +110,11 @@ Each job uses the unchanged ordered 30-instance manifest SHA-256
 `7ef151bdfce7cd0344e27643446f2509823b43432a64292661a6de86ceb26a53`,
 60 solver seconds, four GiB, 300 proof-verification seconds, seed 1, and balanced
 rotating/reversed execution order. Timing includes parsing and preprocessing.
+Both engine kinds receive the same hard external deadline. A definitive result
+observed after 60 seconds can be certified but is excluded from the solve count
+and charged the full PAR-2 penalty. Initial run 38596704485 inherited a native
+two-second process grace and is superseded for comparative acceptance; its
+correctness certification remains valid. No performance endpoint is relaxed.
 Every completed observation is checkpointed with invocation, executable digest,
 source pin, original input hash, statistics, witness/checker log and exit code.
 
@@ -119,6 +124,8 @@ Strict numerical Kissat superiority separately requires **more** certified solve
 and lower PAR-2. A green execution/paired gate is not a Kissat superiority claim.
 No statistical or general SOTA claim is inferred from these numerical gates.
 Disjoint-family holdout remains required before broader adoption or SOTA claims.
+Every proof addition on SAT runs is independently checked for RUP too, including
+unused probing implications that an UNSAT proof checker might backward-slice away.
 
 ## Remaining architectural gaps
 

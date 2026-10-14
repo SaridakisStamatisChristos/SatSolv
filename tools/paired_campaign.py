@@ -36,14 +36,15 @@ def validate_record(record, expected):
 
 
 def summarize(rows, names, time_limit, minimum_solves):
+    def eligible(r): return r['verified'] and not r['timed_out'] and r['elapsed'] <= time_limit
     summaries = {}
     for name in names:
         observations = [row['solvers'][name] for row in rows]
         summaries[name] = {
-            'solved': sum(r['verified'] for r in observations),
-            'par2': sum(min(r['elapsed'], time_limit) if r['verified'] else 2*time_limit for r in observations)/len(rows)}
-    lost = [r['instance'] for r in rows if r['solvers']['control']['verified'] and not r['solvers']['candidate']['verified']]
-    gained = [r['instance'] for r in rows if not r['solvers']['control']['verified'] and r['solvers']['candidate']['verified']]
+            'solved': sum(eligible(r) for r in observations),
+            'par2': sum(r['elapsed'] if eligible(r) else 2*time_limit for r in observations)/len(rows)}
+    lost = [r['instance'] for r in rows if eligible(r['solvers']['control']) and not eligible(r['solvers']['candidate'])]
+    gained = [r['instance'] for r in rows if not eligible(r['solvers']['control']) and eligible(r['solvers']['candidate'])]
     c, b = summaries['candidate'], summaries['control']
     numerical_gate = not lost and c['solved'] >= minimum_solves and c['solved'] >= b['solved'] and c['par2'] <= b['par2']
     k = summaries.get('kissat')
@@ -123,7 +124,7 @@ def main():
                 if arm['kind'] == 'satsolv':
                     command = [arm['binary'], str(cnf), '--proof', str(proof), '--stats-json', str(stats),
                                '--time-limit', str(a.time_limit), '--seed', str(a.seed), *arm['flags']]
-                    timeout = a.time_limit + 2
+                    timeout = a.time_limit
                 else:
                     command = [arm['binary'], '--seed='+str(a.seed), *arm['flags'], str(cnf), str(proof)]
                     timeout = a.time_limit
@@ -134,6 +135,7 @@ def main():
                 if result == 'SAT': verified, verification = benchmark.verify_sat(checker, cnf, record['stdout'], work)
                 elif result == 'UNSAT': verified, verification = benchmark.verify_unsat(verifier, cnf, proof, a.verification_time_limit)
                 record.update({'kind': arm['kind'], 'result': result, 'verified': verified,
+                               'within_solver_budget': not record['timed_out'] and record['elapsed'] <= a.time_limit,
                                'verification': verification, 'proof_bytes': proof.stat().st_size if proof.exists() else 0})
                 if stats.exists():
                     try: record['stats'] = json.loads(stats.read_text())
@@ -144,7 +146,7 @@ def main():
                     document['certification']['passed'] = False
                     document['certification']['violations'].append({'instance': item['name'], 'arm': arm['name'], 'error': failure})
                 save()
-                print(item['name'], arm['name'], result, round(record['elapsed'], 3), 'verified', verified, flush=True)
+                print(item['name'], arm['name'], result, round(record['elapsed'], 3), 'verified', verified, 'within_budget', record['within_solver_budget'], flush=True)
                 if failure: raise SystemExit('certification failed: '+failure)
     document.update(summarize(document['rows'], names, a.time_limit, a.minimum_solves))
     save()

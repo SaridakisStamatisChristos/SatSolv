@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 import core_search_check
 import exhaustive_check
+import check_rup
 
 SSR = ['--experimental-short-ssr']
 GRAPH = ['--experimental-implication-strengthen']
@@ -45,6 +46,7 @@ def main():
               for _ in range(rng.randint(2*n, 7*n))]
         fixtures.append((n, cs))
     sat = unsat = 0
+    sat_prefix_additions = 0
     binary = a.binary.resolve()
     verifier = a.drat_trim.resolve() if a.drat_trim else None
     with tempfile.TemporaryDirectory() as td:
@@ -53,6 +55,16 @@ def main():
             flags = [*arm, '--seed', str(seed), '--reduce-interval', '2', '--target-window', '2']
             if seed == 1: flags += ['--no-congruence']
             result = core_search_check.run_case(binary, n, cs, flags, root, verifier)
+            if result:
+                # Backward-sliced UNSAT checking can ignore unused additions.
+                # Independently check every addition even on SAT executions.
+                db = list(check_rup.parse_cnf(root/'case.cnf'))
+                for deletion, clause in check_rup.parse_records(root/'case.drat'):
+                    if deletion:
+                        if clause in db: db.remove(clause)
+                    else:
+                        assert clause and check_rup.rup(db, clause), ('non-RUP SAT-run addition', clause, flags)
+                        db.append(clause); sat_prefix_additions += 1
             stats = json.loads((root/'case.json').read_text())
             assert stats['strengthen_work'] <= (31 if '31' in arm else 8000000)
             if '--experimental-short-ssr' not in arm: assert stats['ssr_removed'] == 0
@@ -75,6 +87,7 @@ def main():
         p = subprocess.run([str(binary), str(root/'case.cnf'), '--strengthen-budget', '-1'], capture_output=True)
         assert p.returncode == 2
     print(f'PASS: {sat+unsat} strengthening truth/model/RUP checks ({sat} SAT, {unsat} UNSAT); external DRAT {bool(verifier)}; zero budget byte-identical')
+    print(f'PASS: every SAT-run proof addition independently RUP checked ({sat_prefix_additions} additions)')
     if a.pressure:
         if not verifier: raise SystemExit('--pressure requires external DRAT verifier')
         out = Path('benchmarks/results/root-probe-pressure'); out.mkdir(parents=True, exist_ok=True)

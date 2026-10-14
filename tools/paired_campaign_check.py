@@ -5,7 +5,8 @@ import paired_campaign as campaign
 
 def main():
     good = {'result': 'SAT', 'kind': 'satsolv', 'crashed': False, 'elapsed': 1.0,
-            'verified': True, 'exit_code': 10, 'timed_out': False, 'stats': {'proof_bytes': 0}, 'proof_bytes': 0}
+            'verified': True, 'exit_code': 10, 'timed_out': False, 'stats': {'proof_bytes': 0}, 'proof_bytes': 0,
+            'within_solver_budget': True}
     assert campaign.validate_record(good, 'SAT') is None
     for field, bad in [('verified', False), ('exit_code', 0), ('crashed', True),
                        ('elapsed', float('nan')), ('elapsed', -1.0), ('stats', None)]:
@@ -29,6 +30,12 @@ def main():
     verdict = campaign.summarize(rows, ['control', 'candidate', 'kissat'], 60, 1)
     assert verdict['strict_kissat_numerical_superiority']
     assert not verdict['statistical_superiority_established'] and not verdict['general_sota_established']
+    rows[0]['solvers']['candidate'] = dict(good, within_solver_budget=False, elapsed=61)
+    verdict = campaign.summarize(rows, ['control', 'candidate', 'kissat'], 60, 1)
+    assert verdict['summary']['candidate']['solved'] == 0 and verdict['summary']['candidate']['par2'] == 120
+    assert not verdict['paired_numerical_gate'] and not verdict['strict_kissat_numerical_superiority']
+    rows[0]['solvers']['candidate']['within_solver_budget'] = True
+    assert campaign.summarize(rows, ['control', 'candidate', 'kissat'], 60, 1)['summary']['candidate']['solved'] == 0
     print('PASS: certification rejects invalid witnesses, exits, crashes, timing and missing stats; lost solves fail; ties never claim Kissat superiority')
 
 if __name__ == '__main__': main()

@@ -1,0 +1,24 @@
+{
+  "engine_commit_unchanged_from": "6790f88e04a6991240e7fc3fc1852b5b7e716317",
+  "superseded_for_comparative_acceptance_run": 38596704485,
+  "superseded_reason": "native engine inherited a two-second external grace; Kissat had no such grace",
+  "correction": "same hard external deadline for both kinds, including parsing/preprocessing; observed late definitive results excluded from solved and penalized at full PAR-2",
+  "performance_gates_unchanged": true,
+  "verification": {
+    "late_result_cannot_pass_solve_count_even_if_metadata_is_wrong": true,
+    "end_to_end_hard_deadline_smoke_observations": 6,
+    "strengthening_and_probing_cases": 2592,
+    "SAT_model_checks": 1680,
+    "UNSAT_external_DRAT_proofs": 912,
+    "every_SAT_prefix_addition_independently_RUP_checked": 44130,
+    "actual_root_probe_binary_after_real_compaction_external_DRAT": true
+  },
+  "source_sha256": {
+    "tools/paired_campaign.py": "c443a89853d90a8b820de384b9f9cbfa51616feea780b17dad03de72ea222d11",
+    "tools/paired_campaign_check.py": "1220c76adf87db9389c13aa314e8bf6c7a6566970cb9ad611ec4966967a15d71",
+    "tools/strengthen_check.py": "06d2194d95ca184d6a03a043a845832f5fd15864d3e35b37e02bed30074a9b9e",
+    ".github/workflows/structural-search.yml": "bd57e7e6bc877269fcb3652f89e1061ed1026e6e35c64e94eae989d9af4699e8",
+    "docs/structural-search.md": "c694ffb4dcadff930bbc353bb03bc086acb4f4c94763e21d7f4067462695588a"
+  },
+  "default_proof_identity_evidence_commit": "45b3b078e4d4a901ccc0be59ea7f84337c90e8e4"
+}
