@@ -1,0 +1,71 @@
+{
+  "candidate_commit": "6790f88e04a6991240e7fc3fc1852b5b7e716317",
+  "ancestor_commit": "9a44a9b2e550f50c5364089dd2b67870cee109c6",
+  "flags": [],
+  "candidate_binary_sha256": "52395fe9e40ad2fe2807cf1cde9a586a21835661b156f5a85ce5afce92fadae5",
+  "ancestor_binary_sha256": "4da696425ca1420445c863ae9b1126338d3699a9d3c1f056a6782190bb44ab88",
+  "scope": "Complete default model/proof-byte/conflict-count identity on three frozen regression inputs; all optional structural/search/probing switches disabled",
+  "observations": [
+    {
+      "instance": "vmpc_28.shuffled-as.sat05-1957.cnf",
+      "sha256": "00a06c68197e6b7bf0584335405878f15cfba81189cdfdb2dcfd46b464a8704e",
+      "observations": [
+        {
+          "arm": "prior",
+          "exit": 10,
+          "proof_sha256": "d5a78f00922b46edd5ffec4a129b6d74fba1b144435022076f4435c2f966b6ee",
+          "model_sha256": "5f8bb2e8b5884554de8fd6e826d33e5ae05ad7ddda1e20ae3c42a82036ad96a4",
+          "conflicts": 113926
+        },
+        {
+          "arm": "current",
+          "exit": 10,
+          "proof_sha256": "d5a78f00922b46edd5ffec4a129b6d74fba1b144435022076f4435c2f966b6ee",
+          "model_sha256": "5f8bb2e8b5884554de8fd6e826d33e5ae05ad7ddda1e20ae3c42a82036ad96a4",
+          "conflicts": 113926
+        }
+      ]
+    },
+    {
+      "instance": "rand_net70-40-10.shuffled.cnf",
+      "sha256": "da73c9daeaf05aed33180d8978f2675b38d4a7888e97dbc14922e3ec40b90756",
+      "observations": [
+        {
+          "arm": "prior",
+          "exit": 20,
+          "proof_sha256": "42ecf70847e3d94f8c35d9057887f95758380641244b052c07980eb9b4ca0347",
+          "model_sha256": "bde6e1eede96772c07c8ce29fd18088863815bd043aa59a06f11f5838cf8a162",
+          "conflicts": 86
+        },
+        {
+          "arm": "current",
+          "exit": 20,
+          "proof_sha256": "42ecf70847e3d94f8c35d9057887f95758380641244b052c07980eb9b4ca0347",
+          "model_sha256": "bde6e1eede96772c07c8ce29fd18088863815bd043aa59a06f11f5838cf8a162",
+          "conflicts": 86
+        }
+      ]
+    },
+    {
+      "instance": "clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+      "sha256": "4f71b97685f939cc3e2d1dbcd90e53c63a7ed8875beb522d1161a70b89bc0893",
+      "observations": [
+        {
+          "arm": "prior",
+          "exit": 20,
+          "proof_sha256": "700764cfb52e443f872a5a0d7a93d998536b50474142c811af88e08900df02df",
+          "model_sha256": "bde6e1eede96772c07c8ce29fd18088863815bd043aa59a06f11f5838cf8a162",
+          "conflicts": 813819
+        },
+        {
+          "arm": "current",
+          "exit": 20,
+          "proof_sha256": "700764cfb52e443f872a5a0d7a93d998536b50474142c811af88e08900df02df",
+          "model_sha256": "bde6e1eede96772c07c8ce29fd18088863815bd043aa59a06f11f5838cf8a162",
+          "conflicts": 813819
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,78 @@
+[
+  {
+    "case": "clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+    "variables": 132,
+    "clauses": 1527,
+    "literals": 4472,
+    "widths": {
+      "3": 1344,
+      "2": 168,
+      "6": 8,
+      "8": 7
+    },
+    "complete_xor_equations_arity_2_to_6": 0,
+    "gf2_rank": 0,
+    "gf2_inconsistent_subset": false,
+    "scope": "read-only complete truth-table CNF XOR recovery; algebraic evidence only, no DRAT certificate emitted"
+  },
+  {
+    "case": "vmpc_28.shuffled-as.sat05-1957.cnf",
+    "variables": 784,
+    "clauses": 108080,
+    "literals": 283220,
+    "widths": {
+      "2": 42420,
+      "3": 65604,
+      "28": 56
+    },
+    "complete_xor_equations_arity_2_to_6": 0,
+    "gf2_rank": 0,
+    "gf2_inconsistent_subset": false,
+    "scope": "read-only complete truth-table CNF XOR recovery; algebraic evidence only, no DRAT certificate emitted"
+  },
+  {
+    "case": "posixpath__joinrealpath_13.cnf",
+    "variables": 351,
+    "clauses": 4291,
+    "literals": 8879,
+    "widths": {
+      "13": 27,
+      "2": 4264
+    },
+    "complete_xor_equations_arity_2_to_6": 0,
+    "gf2_rank": 0,
+    "gf2_inconsistent_subset": false,
+    "scope": "read-only complete truth-table CNF XOR recovery; algebraic evidence only, no DRAT certificate emitted"
+  },
+  {
+    "case": "or_randxor_k3_n520_m520.cnf",
+    "variables": 1040,
+    "clauses": 6991,
+    "literals": 28080,
+    "widths": {
+      "6": 289,
+      "4": 3468,
+      "5": 1386,
+      "3": 1848
+    },
+    "complete_xor_equations_arity_2_to_6": 0,
+    "gf2_rank": 0,
+    "gf2_inconsistent_subset": false,
+    "scope": "read-only complete truth-table CNF XOR recovery; algebraic evidence only, no DRAT certificate emitted"
+  },
+  {
+    "case": "rand_net70-40-10.shuffled.cnf",
+    "variables": 5600,
+    "clauses": 16661,
+    "literals": 39130,
+    "widths": {
+      "2": 10920,
+      "3": 5740,
+      "70": 1
+    },
+    "complete_xor_equations_arity_2_to_6": 70,
+    "gf2_rank": 70,
+    "gf2_inconsistent_subset": false,
+    "scope": "read-only complete truth-table CNF XOR recovery; algebraic evidence only, no DRAT certificate emitted"
+  }
+]

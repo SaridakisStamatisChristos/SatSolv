@@ -1,0 +1,223 @@
+{
+  "commit": "9a44a9b2e550f50c5364089dd2b67870cee109c6",
+  "artifact_digests_verified": 8,
+  "paired": [
+    {
+      "arm": "rank",
+      "summary": {
+        "engine-control": {
+          "solved": 9,
+          "par2": 84.75083928626667
+        },
+        "candidate": {
+          "solved": 9,
+          "par2": 85.18914226339999
+        }
+      },
+      "gains": [],
+      "losses": [],
+      "frozen_gate_pass": false,
+      "par2_reduction_percent": -0.5171665328916013
+    },
+    {
+      "arm": "rank-recent-delayed",
+      "summary": {
+        "engine-control": {
+          "solved": 9,
+          "par2": 84.76398504159998
+        },
+        "candidate": {
+          "solved": 9,
+          "par2": 84.79158533946666
+        }
+      },
+      "gains": [],
+      "losses": [],
+      "frozen_gate_pass": false,
+      "par2_reduction_percent": -0.03256135002753624
+    },
+    {
+      "arm": "recent-delayed",
+      "summary": {
+        "engine-control": {
+          "solved": 9,
+          "par2": 85.09534280576665
+        },
+        "candidate": {
+          "solved": 9,
+          "par2": 85.14050915756665
+        }
+      },
+      "gains": [],
+      "losses": [],
+      "frozen_gate_pass": false,
+      "par2_reduction_percent": -0.05307734866654215
+    },
+    {
+      "arm": "target-delayed",
+      "summary": {
+        "engine-control": {
+          "solved": 9,
+          "par2": 85.10567293513333
+        },
+        "candidate": {
+          "solved": 10,
+          "par2": 81.89492268923335
+        }
+      },
+      "gains": [
+        {
+          "instance": "combined-crypto1-wff-seed-101-wffvars-500-cryptocplx-31-overlap-2.cnf",
+          "seconds": 21.927200298000002,
+          "result": "SAT",
+          "conflicts": 887045
+        }
+      ],
+      "losses": [],
+      "frozen_gate_pass": true,
+      "par2_reduction_percent": 3.772663014305961
+    },
+    {
+      "arm": "target-reason-delayed",
+      "summary": {
+        "engine-control": {
+          "solved": 9,
+          "par2": 85.13389228226667
+        },
+        "candidate": {
+          "solved": 9,
+          "par2": 85.20297856816667
+        }
+      },
+      "gains": [],
+      "losses": [],
+      "frozen_gate_pass": false,
+      "par2_reduction_percent": -0.08115015541746802
+    }
+  ],
+  "comparators": [
+    {
+      "arm": "rank",
+      "summary": {
+        "kissat": {
+          "solved": 15,
+          "par2": 65.2866468723
+        },
+        "minisat": {
+          "solved": 10,
+          "par2": 85.05582924263332
+        },
+        "satsolv": {
+          "solved": 9,
+          "par2": 85.62187280163333
+        }
+      },
+      "extra_solves_vs_reference_coverage": []
+    },
+    {
+      "arm": "rank-recent-delayed",
+      "summary": {
+        "kissat": {
+          "solved": 15,
+          "par2": 66.51405987699998
+        },
+        "minisat": {
+          "solved": 8,
+          "par2": 90.34441966633335
+        },
+        "satsolv": {
+          "solved": 9,
+          "par2": 85.17318890423331
+        }
+      },
+      "extra_solves_vs_reference_coverage": []
+    },
+    {
+      "arm": "target-reason-delayed",
+      "summary": {
+        "kissat": {
+          "solved": 16,
+          "par2": 62.97260845043331
+        },
+        "minisat": {
+          "solved": 10,
+          "par2": 84.85365836793332
+        },
+        "satsolv": {
+          "solved": 10,
+          "par2": 81.83355056706667
+        }
+      },
+      "extra_solves_vs_reference_coverage": [
+        {
+          "instance": "combined-crypto1-wff-seed-101-wffvars-500-cryptocplx-31-overlap-2.cnf",
+          "seconds": 26.03002785800004,
+          "result": "SAT"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "solver_observations": 580,
+    "checked_sat_models": 124,
+    "checked_unsat_proofs": 48,
+    "invalid_outputs": 0
+  },
+  "scope": "frozen 30, seed 1, 60 seconds, 4 GiB, 300-second proof checking; includes supplementary five-instance proof comparison; numerical qualification only; not statistical superiority or general SOTA",
+  "artifacts": [
+    {
+      "id": 11904315360,
+      "name": "core-search-paired-qualification-rank-recent-delayed",
+      "digest": "sha256:9622956cdedf1bae77d2b84419896eda3054e905bbe2772ee7fbc26c79b7b2fd",
+      "run_id": 38574534265
+    },
+    {
+      "id": 11903881052,
+      "name": "core-search-paired-qualification-target-delayed",
+      "digest": "sha256:64357172269abe76aedd6493b6dd39c7c4e5391a232185905fec69e0ed78e077",
+      "run_id": 38574534265
+    },
+    {
+      "id": 11903800923,
+      "name": "core-search-paired-qualification-target-reason-delayed",
+      "digest": "sha256:b7777e52ef89a9efc925923c2841b15666a03e8dd2697e782e0d76a8b0e83dda",
+      "run_id": 38574534265
+    },
+    {
+      "id": 11903340854,
+      "name": "core-search-paired-qualification-rank",
+      "digest": "sha256:d90bff8a2b72ffa826aaf866fff2855cd39e9900b9a2d44d41d3f6daf6b26298",
+      "run_id": 38574534265
+    },
+    {
+      "id": 11903062428,
+      "name": "core-search-paired-qualification-recent-delayed",
+      "digest": "sha256:0ed0cce4e929a40e8156ec186d780bf96cea3735e85c32d121f0bcfa2d725140",
+      "run_id": 38574534265
+    },
+    {
+      "id": 11905165495,
+      "name": "core-search-comparator-results-target-reason-delayed",
+      "digest": "sha256:e7b4ec30f690e295f0e98cd1a83b52c860a1e8dc506d80b8a267a056d92fa83e",
+      "run_id": 38574534673
+    },
+    {
+      "id": 11904826096,
+      "name": "core-search-comparator-results-rank-recent-delayed",
+      "digest": "sha256:7f634e9f9bfd172735137df507a44ba2a5a2147ef339864caa669ec00d29e396",
+      "run_id": 38574534673
+    },
+    {
+      "id": 11904408805,
+      "name": "core-search-comparator-results-rank",
+      "digest": "sha256:1f6da3f8364efe74bfec188171ac966f7fb7eeb9deb4268a9d688efcf3ad6ffc",
+      "run_id": 38574534673
+    }
+  ],
+  "decision": {
+    "frozen_gate_winner": "target-delayed",
+    "other_arms": "fail paired numerical gate; preserve experimental/off",
+    "default_adoption": "pending replication, exact target-only comparator and holdout",
+    "main_changed": false
+  }
+}

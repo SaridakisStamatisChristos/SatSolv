@@ -1,0 +1,372 @@
+{
+  "scope": "single-seed sequential 10-second mechanism diagnostic; no adoption inference",
+  "solver_version": "4.0.2",
+  "solver_id": "f7e57764c19cf35198830575492dc9d80e872b55",
+  "binary_sha256": "ba17d60a37401d58c0133b8b86949bfa76ef829f3aac96aa0bd5cd4292b7c7f4",
+  "limits": {
+    "solver_seconds": 10,
+    "memory_gib": 4,
+    "seed": 1,
+    "proof_seconds": 300
+  },
+  "rows": [
+    {
+      "case": "posixpath__joinrealpath_13.cnf",
+      "arm": "default",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.default.drat"
+      ],
+      "cnf_sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+      "status": "UNKNOWN",
+      "elapsed_seconds": 10.003110708000008,
+      "exit_code": 0,
+      "proof_bytes": 31786356
+    },
+    {
+      "case": "posixpath__joinrealpath_13.cnf",
+      "arm": "no-eliminate",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--eliminate=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-eliminate.drat"
+      ],
+      "cnf_sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+      "status": "UNSAT",
+      "elapsed_seconds": 5.363290393999932,
+      "exit_code": 20,
+      "proof_bytes": 11953546,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-eliminate.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "posixpath__joinrealpath_13.cnf",
+      "arm": "no-vivify",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--vivify=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-vivify.drat"
+      ],
+      "cnf_sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+      "status": "UNSAT",
+      "elapsed_seconds": 5.342367829000068,
+      "exit_code": 20,
+      "proof_bytes": 15384007,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-vivify.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "posixpath__joinrealpath_13.cnf",
+      "arm": "no-stable",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--stable=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-stable.drat"
+      ],
+      "cnf_sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+      "status": "UNSAT",
+      "elapsed_seconds": 4.7352364360000365,
+      "exit_code": 20,
+      "proof_bytes": 14157746,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-stable.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "posixpath__joinrealpath_13.cnf",
+      "arm": "no-target",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--target=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-target.drat"
+      ],
+      "cnf_sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+      "status": "UNSAT",
+      "elapsed_seconds": 4.536937677999958,
+      "exit_code": 20,
+      "proof_bytes": 12578655,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-target.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "posixpath__joinrealpath_13.cnf",
+      "arm": "no-rephase",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--rephase=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-rephase.drat"
+      ],
+      "cnf_sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+      "status": "UNSAT",
+      "elapsed_seconds": 6.297901091999961,
+      "exit_code": 20,
+      "proof_bytes": 15437379,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-rephase.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "posixpath__joinrealpath_13.cnf",
+      "arm": "no-congruence",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--congruence=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/posixpath__joinrealpath_13.cnf.no-congruence.drat"
+      ],
+      "cnf_sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+      "status": "UNKNOWN",
+      "elapsed_seconds": 10.009943245000045,
+      "exit_code": 0,
+      "proof_bytes": 43668049
+    },
+    {
+      "case": "or_randxor_k3_n520_m520.cnf",
+      "arm": "default",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.default.drat"
+      ],
+      "cnf_sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+      "status": "UNSAT",
+      "elapsed_seconds": 1.3589406009998584,
+      "exit_code": 20,
+      "proof_bytes": 4475051,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.default.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "or_randxor_k3_n520_m520.cnf",
+      "arm": "no-eliminate",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--eliminate=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-eliminate.drat"
+      ],
+      "cnf_sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+      "status": "UNSAT",
+      "elapsed_seconds": 1.6134992330000841,
+      "exit_code": 20,
+      "proof_bytes": 3732426,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-eliminate.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "or_randxor_k3_n520_m520.cnf",
+      "arm": "no-vivify",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--vivify=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-vivify.drat"
+      ],
+      "cnf_sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+      "status": "UNSAT",
+      "elapsed_seconds": 1.2827762249999068,
+      "exit_code": 20,
+      "proof_bytes": 3900731,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-vivify.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "or_randxor_k3_n520_m520.cnf",
+      "arm": "no-stable",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--stable=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-stable.drat"
+      ],
+      "cnf_sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+      "status": "UNSAT",
+      "elapsed_seconds": 1.531546570000046,
+      "exit_code": 20,
+      "proof_bytes": 4348111,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-stable.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "or_randxor_k3_n520_m520.cnf",
+      "arm": "no-target",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--target=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-target.drat"
+      ],
+      "cnf_sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+      "status": "UNSAT",
+      "elapsed_seconds": 1.3083359859999746,
+      "exit_code": 20,
+      "proof_bytes": 3792683,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-target.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "or_randxor_k3_n520_m520.cnf",
+      "arm": "no-rephase",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--rephase=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-rephase.drat"
+      ],
+      "cnf_sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+      "status": "UNSAT",
+      "elapsed_seconds": 1.0754514280001786,
+      "exit_code": 20,
+      "proof_bytes": 3333857,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-rephase.drat"
+        ],
+        "exit_code": 0
+      }
+    },
+    {
+      "case": "or_randxor_k3_n520_m520.cnf",
+      "arm": "no-congruence",
+      "command": [
+        "/workspace/scratch/c12b5997b0eb/kissat-pinned/build/kissat",
+        "--seed=1",
+        "--time=10",
+        "--statistics",
+        "--congruence=0",
+        "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+        "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-congruence.drat"
+      ],
+      "cnf_sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+      "status": "UNSAT",
+      "elapsed_seconds": 1.238141781999957,
+      "exit_code": 20,
+      "proof_bytes": 3680053,
+      "verification": {
+        "verified": true,
+        "command": [
+          "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+          "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+          "/workspace/scratch/c12b5997b0eb/causal-audit/competitor-mechanisms/or_randxor_k3_n520_m520.cnf.no-congruence.drat"
+        ],
+        "exit_code": 0
+      }
+    }
+  ]
+}
