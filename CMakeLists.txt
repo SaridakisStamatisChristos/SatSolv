@@ -8,6 +8,7 @@ add_library(satsolv_core
     src/parser.cpp
     src/solver_v2.cpp
     src/simplifier.cpp
+    src/eliminate.cpp
     src/congruence.cpp
 )
 target_include_directories(satsolv_core PUBLIC include)
@@ -71,6 +72,18 @@ if(BUILD_TESTING)
     endif()
   endif()
   add_test(NAME congruence COMMAND satsolv_congruence_tests)
+  add_executable(satsolv_vivification_tests tests/test_vivification.cpp)
+  target_link_libraries(satsolv_vivification_tests PRIVATE satsolv_core)
+  if(MSVC)
+    target_compile_options(satsolv_vivification_tests PRIVATE /UNDEBUG)
+  else()
+    target_compile_options(satsolv_vivification_tests PRIVATE -UNDEBUG)
+    if(SATSOLV_ENABLE_SANITIZERS)
+      target_compile_options(satsolv_vivification_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+      target_link_options(satsolv_vivification_tests PRIVATE -fsanitize=address,undefined)
+    endif()
+  endif()
+  add_test(NAME vivification COMMAND satsolv_vivification_tests)
 endif()
 
 install(TARGETS satsolv RUNTIME DESTINATION bin)

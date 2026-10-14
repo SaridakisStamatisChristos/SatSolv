@@ -1,0 +1,1888 @@
+{
+  "scope": "exploratory local; variable host load; some concurrent build/correctness work; not statistical/adoption evidence",
+  "qualified_parent": "f997df1bec87f045ffa48d16ab50729cd90e9a0e",
+  "screens": [
+    {
+      "file": "eliminate.json",
+      "flags": [
+        "--experimental-eliminate (literal-non-growing draft)"
+      ],
+      "certification": {
+        "passed": true,
+        "violations": []
+      },
+      "environment": {
+        "kissat_proof_enabled": false,
+        "memory_gib": 4.0,
+        "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+        "python": "3.12.14",
+        "repository_commit": "UNAVAILABLE",
+        "time_limit_seconds": 15.0,
+        "toolchain": {
+          "drat_trim": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "usage: drat-trim [INPUT] [<PROOF>] [<option> ...]\n\nwhere <option> is one of the following\n\n  -h          print this command line option summary\n  -c CORE     prints the unsatisfiable core to the file CORE (DIMACS format)\n  -a ACTIVE   prints the active clauses to the file ACTIVE (DIMACS format)\n  -l LEMMAS   prints the core lemmas to the file LEMMAS (DRAT format)\n  -L LEMMAS   prints the core lemmas to the file LEMMAS (LRAT format)\n  -r TRACE    resolution graph in the TRACE file (TRACECHECK format)\n\n  -t <lim>    time limit in seconds (default 40000)\n  -u          default unit propatation (i.e., no core-first)\n  -f          forward mode for UNSAT\n  -v          more verbose output\n  -b          show progress bar\n  -O          optimize proof till fixpoint by repeating verification\n  -C          compress core lemmas (emit binary proof)\n  -D          delete proof file after parsing\n  -I          force ASCII proof parse mode\n  -i          force binary proof parse mode\n  -w          suppress warning messages\n  -W          exit after first warning\n  -p          run in plain mode (i.e., ignore deletion information)\n\n  -R          turn off reduce mode\n\n  -S          run in SAT check mode (forward checking)\n\n  -U          only allow RUP additions\nand input and proof are specified as follows\n\n  INPUT       input file in DIMACS format\n  PROOF       proof file in DRAT format (stdin if no argument)"
+          },
+          "satsolv": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "SatSolv 0.3.0"
+          }
+        },
+        "verification_time_limit_seconds": 180.0
+      },
+      "summary": {
+        "satsolv": {
+          "crashes": 0,
+          "geomean_solved_seconds": 2.0360592009296643,
+          "median_solved_seconds": 6.894954924500013,
+          "par2": 20.757981969800007,
+          "solved": 2,
+          "solver_errors": 0,
+          "timeouts": 0,
+          "verification_failures": 0
+        }
+      },
+      "rows": [
+        {
+          "expected": "UNSAT",
+          "instance": "clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+          "sha256": "4f71b97685f939cc3e2d1dbcd90e53c63a7ed8875beb522d1161a70b89bc0893",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+                "--proof",
+                "/tmp/tmpdcvr88u_/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpdcvr88u_/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.010264887999995,
+              "exit_code": 0,
+              "proof_bytes": 50469293,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 6456,
+                "conflicts": 782806,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 8390,
+                "decisions": 1110970,
+                "deleted_learnt_clauses": 779879,
+                "descriptor_compactions": 130,
+                "descriptor_scans": 2818161,
+                "eliminated_variables": 0,
+                "elimination_attempts": 132,
+                "elimination_work": 22766,
+                "heap_updates": 0,
+                "learnt_clauses": 782806,
+                "live_clauses": 4454,
+                "max_trail": 132,
+                "parse_seconds": 0.001001985,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 50469293,
+                "propagations": 15385296,
+                "restarts": 1659,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000059652,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/571a2f223784fb92a53b4cc8cc8b569e"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "or_randxor_k3_n520_m520.cnf",
+          "sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+                "--proof",
+                "/tmp/tmpdcvr88u_/or_randxor_k3_n520_m520.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpdcvr88u_/or_randxor_k3_n520_m520.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.01061177400004,
+              "exit_code": 0,
+              "proof_bytes": 88374889,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 11904,
+                "conflicts": 1065568,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 46222,
+                "decisions": 2904615,
+                "deleted_learnt_clauses": 1061193,
+                "descriptor_compactions": 177,
+                "descriptor_scans": 4836619,
+                "eliminated_variables": 216,
+                "elimination_attempts": 974,
+                "elimination_work": 242266,
+                "heap_updates": 0,
+                "learnt_clauses": 1065568,
+                "live_clauses": 9919,
+                "max_trail": 537,
+                "parse_seconds": 0.002939319,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 88374889,
+                "propagations": 21318666,
+                "restarts": 2045,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000046074,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 10616,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/4fdcf4248a332c1c9a89d37439c879a9"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "posixpath__joinrealpath_13.cnf",
+          "sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+                "--proof",
+                "/tmp/tmpdcvr88u_/posixpath__joinrealpath_13.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpdcvr88u_/posixpath__joinrealpath_13.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.032704163999995,
+              "exit_code": 0,
+              "proof_bytes": 133414079,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 6305,
+                "conflicts": 474000,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 27042,
+                "decisions": 884481,
+                "deleted_learnt_clauses": 471986,
+                "descriptor_compactions": 79,
+                "descriptor_scans": 1919526,
+                "eliminated_variables": 0,
+                "elimination_attempts": 351,
+                "elimination_work": 37934,
+                "heap_updates": 0,
+                "learnt_clauses": 474000,
+                "live_clauses": 6305,
+                "max_trail": 351,
+                "parse_seconds": 0.001335035,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 133414079,
+                "propagations": 19724181,
+                "restarts": 1021,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.023745783,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/11db226d109e82f93aaa3b2604173ff9"
+        },
+        {
+          "expected": "SAT",
+          "instance": "vmpc_28.shuffled-as.sat05-1957.cnf",
+          "sha256": "00a06c68197e6b7bf0584335405878f15cfba81189cdfdb2dcfd46b464a8704e",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/vmpc_28.shuffled-as.sat05-1957.cnf",
+                "--proof",
+                "/tmp/tmpdcvr88u_/vmpc_28.shuffled-as.sat05-1957.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpdcvr88u_/vmpc_28.shuffled-as.sat05-1957.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 13.482432920000008,
+              "exit_code": 10,
+              "proof_bytes": 30525166,
+              "result": "SAT",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 116461,
+                "conflicts": 113926,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 585788,
+                "decisions": 240811,
+                "deleted_learnt_clauses": 109533,
+                "descriptor_compactions": 18,
+                "descriptor_scans": 2325778,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "learnt_clauses": 113926,
+                "live_clauses": 112473,
+                "max_trail": 784,
+                "parse_seconds": 0.044249097,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 30525166,
+                "propagations": 14511762,
+                "restarts": 303,
+                "result": "SAT",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 13.421012694,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "command": [
+                  "python3",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-search/tools/check_model.py",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/vmpc_28.shuffled-as.sat05-1957.cnf",
+                  "/tmp/tmpdcvr88u_/solver.out"
+                ],
+                "exit_code": 0,
+                "stderr": "",
+                "stdout": "PASS: model satisfies every original clause\n"
+              },
+              "verified": true,
+              "stdout_status_lines": [
+                "s SATISFIABLE"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/00f4aca773e5675f35263dcd46b15bde"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "rand_net70-40-10.shuffled.cnf",
+          "sha256": "da73c9daeaf05aed33180d8978f2675b38d4a7888e97dbc14922e3ec40b90756",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/rand_net70-40-10.shuffled.cnf",
+                "--proof",
+                "/tmp/tmpdcvr88u_/rand_net70-40-10.shuffled.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpdcvr88u_/rand_net70-40-10.shuffled.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 0.30747692900001766,
+              "exit_code": 20,
+              "proof_bytes": 178256,
+              "result": "UNSAT",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 6336,
+                "conflicts": 0,
+                "congruence_and_gates": 119194,
+                "congruence_equivalences": 2733,
+                "congruence_rounds": 31,
+                "congruence_work": 2998797,
+                "decisions": 0,
+                "deleted_learnt_clauses": 0,
+                "descriptor_compactions": 0,
+                "descriptor_scans": 0,
+                "eliminated_variables": 1051,
+                "elimination_attempts": 3018,
+                "elimination_work": 188814,
+                "heap_updates": 0,
+                "learnt_clauses": 0,
+                "live_clauses": 6336,
+                "max_trail": 70,
+                "parse_seconds": 0.005486447,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 178256,
+                "propagations": 23,
+                "restarts": 0,
+                "result": "UNSAT",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 0.294202795,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 9301,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "command": [
+                  "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/rand_net70-40-10.shuffled.cnf",
+                  "/tmp/tmpdcvr88u_/rand_net70-40-10.shuffled.cnf.drat"
+                ],
+                "exit_code": 0,
+                "stderr": "",
+                "stdout": "\nc turning on binary mode checking\n\nc parsing input formula with 5600 variables and 16661 clauses\n\nc finished parsing, read 178256 bytes from proof file\n\nc detected empty clause; start verification via backward checking\n\nc 16520 of 16661 clauses in core                            \n\nc 13685 of 26339 lemmas in core using 35278 resolution steps\n\nc 0 RAT lemmas in core; 2 redundant literals in core lemmas\n\ns VERIFIED\n\nc verification time: 0.115 seconds\n",
+                "verified_verdict": true
+              },
+              "verified": true,
+              "stdout_status_lines": [
+                "s UNSATISFIABLE"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/00f2eb377986e7decbc863931680a3b2"
+        }
+      ]
+    },
+    {
+      "file": "eliminate-bounded-growth.json",
+      "flags": [
+        "--experimental-eliminate"
+      ],
+      "certification": {
+        "passed": true,
+        "violations": []
+      },
+      "environment": {
+        "kissat_proof_enabled": false,
+        "memory_gib": 4.0,
+        "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+        "python": "3.12.14",
+        "repository_commit": "UNAVAILABLE",
+        "time_limit_seconds": 15.0,
+        "toolchain": {
+          "drat_trim": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "usage: drat-trim [INPUT] [<PROOF>] [<option> ...]\n\nwhere <option> is one of the following\n\n  -h          print this command line option summary\n  -c CORE     prints the unsatisfiable core to the file CORE (DIMACS format)\n  -a ACTIVE   prints the active clauses to the file ACTIVE (DIMACS format)\n  -l LEMMAS   prints the core lemmas to the file LEMMAS (DRAT format)\n  -L LEMMAS   prints the core lemmas to the file LEMMAS (LRAT format)\n  -r TRACE    resolution graph in the TRACE file (TRACECHECK format)\n\n  -t <lim>    time limit in seconds (default 40000)\n  -u          default unit propatation (i.e., no core-first)\n  -f          forward mode for UNSAT\n  -v          more verbose output\n  -b          show progress bar\n  -O          optimize proof till fixpoint by repeating verification\n  -C          compress core lemmas (emit binary proof)\n  -D          delete proof file after parsing\n  -I          force ASCII proof parse mode\n  -i          force binary proof parse mode\n  -w          suppress warning messages\n  -W          exit after first warning\n  -p          run in plain mode (i.e., ignore deletion information)\n\n  -R          turn off reduce mode\n\n  -S          run in SAT check mode (forward checking)\n\n  -U          only allow RUP additions\nand input and proof are specified as follows\n\n  INPUT       input file in DIMACS format\n  PROOF       proof file in DRAT format (stdin if no argument)"
+          },
+          "satsolv": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "SatSolv 0.3.0"
+          }
+        },
+        "verification_time_limit_seconds": 180.0
+      },
+      "summary": {
+        "satsolv": {
+          "crashes": 0,
+          "geomean_solved_seconds": 1.5445457961995601,
+          "median_solved_seconds": 4.358049345500035,
+          "par2": 19.743219738200015,
+          "solved": 2,
+          "solver_errors": 0,
+          "timeouts": 0,
+          "verification_failures": 0
+        }
+      },
+      "rows": [
+        {
+          "expected": "UNSAT",
+          "instance": "clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+          "sha256": "4f71b97685f939cc3e2d1dbcd90e53c63a7ed8875beb522d1161a70b89bc0893",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+                "--proof",
+                "/tmp/tmpvbb2qg3k/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpvbb2qg3k/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.008828864000066,
+              "exit_code": 0,
+              "proof_bytes": 64928300,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 5766,
+                "conflicts": 926164,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 8390,
+                "decisions": 1289815,
+                "deleted_learnt_clauses": 923909,
+                "descriptor_compactions": 154,
+                "descriptor_scans": 3342010,
+                "eliminated_variables": 15,
+                "elimination_attempts": 132,
+                "elimination_work": 91176,
+                "heap_updates": 0,
+                "learnt_clauses": 926164,
+                "live_clauses": 3767,
+                "max_trail": 117,
+                "parse_seconds": 0.001460264,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 64928300,
+                "propagations": 13453532,
+                "restarts": 2040,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000039656,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 142,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/571a2f223784fb92a53b4cc8cc8b569e"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "or_randxor_k3_n520_m520.cnf",
+          "sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+                "--proof",
+                "/tmp/tmpvbb2qg3k/or_randxor_k3_n520_m520.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpvbb2qg3k/or_randxor_k3_n520_m520.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.009711959000015,
+              "exit_code": 0,
+              "proof_bytes": 87591536,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 13471,
+                "conflicts": 1055150,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 46222,
+                "decisions": 3012848,
+                "deleted_learnt_clauses": 1051197,
+                "descriptor_compactions": 175,
+                "descriptor_scans": 4787103,
+                "eliminated_variables": 222,
+                "elimination_attempts": 980,
+                "elimination_work": 360689,
+                "heap_updates": 0,
+                "learnt_clauses": 1055150,
+                "live_clauses": 9477,
+                "max_trail": 532,
+                "parse_seconds": 0.002619718,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 87591536,
+                "propagations": 21002913,
+                "restarts": 2045,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000052469,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 15627,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/4fdcf4248a332c1c9a89d37439c879a9"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "posixpath__joinrealpath_13.cnf",
+          "sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+                "--proof",
+                "/tmp/tmpvbb2qg3k/posixpath__joinrealpath_13.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpvbb2qg3k/posixpath__joinrealpath_13.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.009220085000038,
+              "exit_code": 0,
+              "proof_bytes": 134200024,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 6635,
+                "conflicts": 444338,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 27042,
+                "decisions": 711800,
+                "deleted_learnt_clauses": 441967,
+                "descriptor_compactions": 74,
+                "descriptor_scans": 1795078,
+                "eliminated_variables": 27,
+                "elimination_attempts": 351,
+                "elimination_work": 471263,
+                "heap_updates": 0,
+                "learnt_clauses": 444338,
+                "live_clauses": 6635,
+                "max_trail": 324,
+                "parse_seconds": 0.001616428,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 134200024,
+                "propagations": 18432607,
+                "restarts": 1020,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000054717,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 732,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/11db226d109e82f93aaa3b2604173ff9"
+        },
+        {
+          "expected": "SAT",
+          "instance": "vmpc_28.shuffled-as.sat05-1957.cnf",
+          "sha256": "00a06c68197e6b7bf0584335405878f15cfba81189cdfdb2dcfd46b464a8704e",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/vmpc_28.shuffled-as.sat05-1957.cnf",
+                "--proof",
+                "/tmp/tmpvbb2qg3k/vmpc_28.shuffled-as.sat05-1957.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpvbb2qg3k/vmpc_28.shuffled-as.sat05-1957.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 8.433214665000037,
+              "exit_code": 10,
+              "proof_bytes": 30525166,
+              "result": "SAT",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 116461,
+                "conflicts": 113926,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 585788,
+                "decisions": 240811,
+                "deleted_learnt_clauses": 109533,
+                "descriptor_compactions": 18,
+                "descriptor_scans": 2325778,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "learnt_clauses": 113926,
+                "live_clauses": 112473,
+                "max_trail": 784,
+                "parse_seconds": 0.038900639,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 30525166,
+                "propagations": 14511762,
+                "restarts": 303,
+                "result": "SAT",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 8.377257455,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "command": [
+                  "python3",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-search/tools/check_model.py",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/vmpc_28.shuffled-as.sat05-1957.cnf",
+                  "/tmp/tmpvbb2qg3k/solver.out"
+                ],
+                "exit_code": 0,
+                "stderr": "",
+                "stdout": "PASS: model satisfies every original clause\n"
+              },
+              "verified": true,
+              "stdout_status_lines": [
+                "s SATISFIABLE"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/00f4aca773e5675f35263dcd46b15bde"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "rand_net70-40-10.shuffled.cnf",
+          "sha256": "da73c9daeaf05aed33180d8978f2675b38d4a7888e97dbc14922e3ec40b90756",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/eliminate",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/rand_net70-40-10.shuffled.cnf",
+                "--proof",
+                "/tmp/tmpvbb2qg3k/rand_net70-40-10.shuffled.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpvbb2qg3k/rand_net70-40-10.shuffled.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 0.2828840260000334,
+              "exit_code": 20,
+              "proof_bytes": 183482,
+              "result": "UNSAT",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 6278,
+                "conflicts": 0,
+                "congruence_and_gates": 119194,
+                "congruence_equivalences": 2733,
+                "congruence_rounds": 31,
+                "congruence_work": 2998797,
+                "decisions": 0,
+                "deleted_learnt_clauses": 0,
+                "descriptor_compactions": 0,
+                "descriptor_scans": 0,
+                "eliminated_variables": 1128,
+                "elimination_attempts": 3103,
+                "elimination_work": 235719,
+                "heap_updates": 0,
+                "learnt_clauses": 0,
+                "live_clauses": 6278,
+                "max_trail": 70,
+                "parse_seconds": 0.005613898,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 183482,
+                "propagations": 23,
+                "restarts": 0,
+                "result": "UNSAT",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 0.271293514,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 10934,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "command": [
+                  "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/rand_net70-40-10.shuffled.cnf",
+                  "/tmp/tmpvbb2qg3k/rand_net70-40-10.shuffled.cnf.drat"
+                ],
+                "exit_code": 0,
+                "stderr": "",
+                "stdout": "\nc turning on binary mode checking\n\nc parsing input formula with 5600 variables and 16661 clauses\n\nc finished parsing, read 183482 bytes from proof file\n\nc detected empty clause; start verification via backward checking\n\nc 16520 of 16661 clauses in core                            \n\nc 13685 of 26850 lemmas in core using 35278 resolution steps\n\nc 0 RAT lemmas in core; 2 redundant literals in core lemmas\n\ns VERIFIED\n\nc verification time: 0.116 seconds\n",
+                "verified_verdict": true
+              },
+              "verified": true,
+              "stdout_status_lines": [
+                "s UNSATISFIABLE"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/00f2eb377986e7decbc863931680a3b2"
+        }
+      ]
+    },
+    {
+      "file": "control.json",
+      "flags": [],
+      "certification": {
+        "passed": true,
+        "violations": []
+      },
+      "environment": {
+        "kissat_proof_enabled": false,
+        "memory_gib": 4.0,
+        "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+        "python": "3.12.14",
+        "repository_commit": "UNAVAILABLE",
+        "time_limit_seconds": 15.0,
+        "toolchain": {
+          "drat_trim": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "usage: drat-trim [INPUT] [<PROOF>] [<option> ...]\n\nwhere <option> is one of the following\n\n  -h          print this command line option summary\n  -c CORE     prints the unsatisfiable core to the file CORE (DIMACS format)\n  -a ACTIVE   prints the active clauses to the file ACTIVE (DIMACS format)\n  -l LEMMAS   prints the core lemmas to the file LEMMAS (DRAT format)\n  -L LEMMAS   prints the core lemmas to the file LEMMAS (LRAT format)\n  -r TRACE    resolution graph in the TRACE file (TRACECHECK format)\n\n  -t <lim>    time limit in seconds (default 40000)\n  -u          default unit propatation (i.e., no core-first)\n  -f          forward mode for UNSAT\n  -v          more verbose output\n  -b          show progress bar\n  -O          optimize proof till fixpoint by repeating verification\n  -C          compress core lemmas (emit binary proof)\n  -D          delete proof file after parsing\n  -I          force ASCII proof parse mode\n  -i          force binary proof parse mode\n  -w          suppress warning messages\n  -W          exit after first warning\n  -p          run in plain mode (i.e., ignore deletion information)\n\n  -R          turn off reduce mode\n\n  -S          run in SAT check mode (forward checking)\n\n  -U          only allow RUP additions\nand input and proof are specified as follows\n\n  INPUT       input file in DIMACS format\n  PROOF       proof file in DRAT format (stdin if no argument)"
+          },
+          "satsolv": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/search-local/control",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "SatSolv 0.3.0"
+          }
+        },
+        "verification_time_limit_seconds": 180.0
+      },
+      "summary": {
+        "satsolv": {
+          "crashes": 0,
+          "geomean_solved_seconds": 1.6771457826351381,
+          "median_solved_seconds": 4.6578281810000135,
+          "par2": 19.863131272400004,
+          "solved": 2,
+          "solver_errors": 0,
+          "timeouts": 0,
+          "verification_failures": 0
+        }
+      },
+      "rows": [
+        {
+          "expected": "UNSAT",
+          "instance": "clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+          "sha256": "4f71b97685f939cc3e2d1dbcd90e53c63a7ed8875beb522d1161a70b89bc0893",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/control",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+                "--proof",
+                "/tmp/tmpzbqpjur8/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpzbqpjur8/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.007338947000108,
+              "exit_code": 0,
+              "proof_bytes": 44061838,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 6285,
+                "conflicts": 674683,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 8390,
+                "decisions": 960502,
+                "deleted_learnt_clauses": 671926,
+                "descriptor_compactions": 112,
+                "descriptor_scans": 2423883,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "learnt_clauses": 674683,
+                "live_clauses": 4284,
+                "max_trail": 132,
+                "parse_seconds": 0.000847388,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 44061838,
+                "propagations": 13225323,
+                "restarts": 1465,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000039779,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/571a2f223784fb92a53b4cc8cc8b569e"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "or_randxor_k3_n520_m520.cnf",
+          "sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/control",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+                "--proof",
+                "/tmp/tmpzbqpjur8/or_randxor_k3_n520_m520.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpzbqpjur8/or_randxor_k3_n520_m520.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.011600716999965,
+              "exit_code": 0,
+              "proof_bytes": 72017722,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 12194,
+                "conflicts": 848555,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 46222,
+                "decisions": 2359403,
+                "deleted_learnt_clauses": 845354,
+                "descriptor_compactions": 141,
+                "descriptor_scans": 4018093,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "learnt_clauses": 848555,
+                "live_clauses": 10192,
+                "max_trail": 621,
+                "parse_seconds": 0.002636627,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 72017722,
+                "propagations": 17662747,
+                "restarts": 1808,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000064365,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/4fdcf4248a332c1c9a89d37439c879a9"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "posixpath__joinrealpath_13.cnf",
+          "sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/control",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+                "--proof",
+                "/tmp/tmpzbqpjur8/posixpath__joinrealpath_13.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpzbqpjur8/posixpath__joinrealpath_13.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.01327783399995,
+              "exit_code": 0,
+              "proof_bytes": 109213222,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 6298,
+                "conflicts": 390000,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 27042,
+                "decisions": 738249,
+                "deleted_learnt_clauses": 387993,
+                "descriptor_compactions": 65,
+                "descriptor_scans": 1578342,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "learnt_clauses": 390000,
+                "live_clauses": 6298,
+                "max_trail": 351,
+                "parse_seconds": 0.001892391,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 109213222,
+                "propagations": 16032654,
+                "restarts": 946,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000901877,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/11db226d109e82f93aaa3b2604173ff9"
+        },
+        {
+          "expected": "SAT",
+          "instance": "vmpc_28.shuffled-as.sat05-1957.cnf",
+          "sha256": "00a06c68197e6b7bf0584335405878f15cfba81189cdfdb2dcfd46b464a8704e",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/control",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/vmpc_28.shuffled-as.sat05-1957.cnf",
+                "--proof",
+                "/tmp/tmpzbqpjur8/vmpc_28.shuffled-as.sat05-1957.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpzbqpjur8/vmpc_28.shuffled-as.sat05-1957.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 9.00323327000001,
+              "exit_code": 10,
+              "proof_bytes": 30525166,
+              "result": "SAT",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 116461,
+                "conflicts": 113926,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 585788,
+                "decisions": 240811,
+                "deleted_learnt_clauses": 109533,
+                "descriptor_compactions": 18,
+                "descriptor_scans": 2325778,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "learnt_clauses": 113926,
+                "live_clauses": 112473,
+                "max_trail": 784,
+                "parse_seconds": 0.06072326,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 30525166,
+                "propagations": 14511762,
+                "restarts": 303,
+                "result": "SAT",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 8.928062114,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "command": [
+                  "python3",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-search/tools/check_model.py",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/vmpc_28.shuffled-as.sat05-1957.cnf",
+                  "/tmp/tmpzbqpjur8/solver.out"
+                ],
+                "exit_code": 0,
+                "stderr": "",
+                "stdout": "PASS: model satisfies every original clause\n"
+              },
+              "verified": true,
+              "stdout_status_lines": [
+                "s SATISFIABLE"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/00f4aca773e5675f35263dcd46b15bde"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "rand_net70-40-10.shuffled.cnf",
+          "sha256": "da73c9daeaf05aed33180d8978f2675b38d4a7888e97dbc14922e3ec40b90756",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/control",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/rand_net70-40-10.shuffled.cnf",
+                "--proof",
+                "/tmp/tmpzbqpjur8/rand_net70-40-10.shuffled.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpzbqpjur8/rand_net70-40-10.shuffled.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 0.3124230920000173,
+              "exit_code": 20,
+              "proof_bytes": 151891,
+              "result": "UNSAT",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 8407,
+                "conflicts": 86,
+                "congruence_and_gates": 119194,
+                "congruence_equivalences": 2733,
+                "congruence_rounds": 31,
+                "congruence_work": 2998797,
+                "decisions": 1742,
+                "deleted_learnt_clauses": 0,
+                "descriptor_compactions": 0,
+                "descriptor_scans": 0,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "learnt_clauses": 85,
+                "live_clauses": 8407,
+                "max_trail": 2794,
+                "parse_seconds": 0.006398964,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 151891,
+                "propagations": 75689,
+                "restarts": 0,
+                "result": "UNSAT",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 0.298609835,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "command": [
+                  "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/rand_net70-40-10.shuffled.cnf",
+                  "/tmp/tmpzbqpjur8/rand_net70-40-10.shuffled.cnf.drat"
+                ],
+                "exit_code": 0,
+                "stderr": "",
+                "stdout": "\nc turning on binary mode checking\n\nc parsing input formula with 5600 variables and 16661 clauses\n\nc finished parsing, read 151891 bytes from proof file\n\nc detected empty clause; start verification via backward checking\n\nc 16520 of 16661 clauses in core                            \n\nc 13685 of 22900 lemmas in core using 35278 resolution steps\n\nc 0 RAT lemmas in core; 2 redundant literals in core lemmas\n\ns VERIFIED\n\nc verification time: 0.142 seconds\n",
+                "verified_verdict": true
+              },
+              "verified": true,
+              "stdout_status_lines": [
+                "s UNSATISFIABLE"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/00f2eb377986e7decbc863931680a3b2"
+        }
+      ]
+    },
+    {
+      "file": "dynamic-lbd.json",
+      "flags": [
+        "--experimental-dynamic-lbd"
+      ],
+      "certification": {
+        "passed": true,
+        "violations": []
+      },
+      "environment": {
+        "kissat_proof_enabled": false,
+        "memory_gib": 4.0,
+        "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+        "python": "3.12.14",
+        "repository_commit": "UNAVAILABLE",
+        "time_limit_seconds": 15.0,
+        "toolchain": {
+          "drat_trim": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "usage: drat-trim [INPUT] [<PROOF>] [<option> ...]\n\nwhere <option> is one of the following\n\n  -h          print this command line option summary\n  -c CORE     prints the unsatisfiable core to the file CORE (DIMACS format)\n  -a ACTIVE   prints the active clauses to the file ACTIVE (DIMACS format)\n  -l LEMMAS   prints the core lemmas to the file LEMMAS (DRAT format)\n  -L LEMMAS   prints the core lemmas to the file LEMMAS (LRAT format)\n  -r TRACE    resolution graph in the TRACE file (TRACECHECK format)\n\n  -t <lim>    time limit in seconds (default 40000)\n  -u          default unit propatation (i.e., no core-first)\n  -f          forward mode for UNSAT\n  -v          more verbose output\n  -b          show progress bar\n  -O          optimize proof till fixpoint by repeating verification\n  -C          compress core lemmas (emit binary proof)\n  -D          delete proof file after parsing\n  -I          force ASCII proof parse mode\n  -i          force binary proof parse mode\n  -w          suppress warning messages\n  -W          exit after first warning\n  -p          run in plain mode (i.e., ignore deletion information)\n\n  -R          turn off reduce mode\n\n  -S          run in SAT check mode (forward checking)\n\n  -U          only allow RUP additions\nand input and proof are specified as follows\n\n  INPUT       input file in DIMACS format\n  PROOF       proof file in DRAT format (stdin if no argument)"
+          },
+          "satsolv": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/search-local/dynamic-lbd",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "SatSolv 0.3.0"
+          }
+        },
+        "verification_time_limit_seconds": 180.0
+      },
+      "summary": {
+        "satsolv": {
+          "crashes": 0,
+          "geomean_solved_seconds": 1.9639043456409349,
+          "median_solved_seconds": 5.107471877499961,
+          "par2": 20.042988750999985,
+          "solved": 2,
+          "solver_errors": 0,
+          "timeouts": 0,
+          "verification_failures": 0
+        }
+      },
+      "rows": [
+        {
+          "expected": "UNSAT",
+          "instance": "clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+          "sha256": "4f71b97685f939cc3e2d1dbcd90e53c63a7ed8875beb522d1161a70b89bc0893",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/dynamic-lbd",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+                "--proof",
+                "/tmp/tmpuh7_a4y_/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpuh7_a4y_/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 9.822272901999895,
+              "exit_code": 20,
+              "proof_bytes": 29396992,
+              "result": "UNSAT",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 7273,
+                "conflicts": 469242,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 8390,
+                "decisions": 648337,
+                "deleted_learnt_clauses": 463495,
+                "descriptor_compactions": 78,
+                "descriptor_scans": 2017103,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "lbd_improvements": 549912,
+                "learnt_clauses": 469241,
+                "live_clauses": 7273,
+                "max_trail": 132,
+                "parse_seconds": 0.000837011,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 29396992,
+                "propagations": 7457288,
+                "restarts": 1021,
+                "result": "UNSAT",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 9.813986138,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "command": [
+                  "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf",
+                  "/tmp/tmpuh7_a4y_/clqcolor-08-06-07.shuffled-as.sat05-1257.cnf.drat"
+                ],
+                "exit_code": 0,
+                "stderr": "",
+                "stdout": "\nc turning on binary mode checking\n\nc parsing input formula with 132 variables and 1527 clauses\n\nc finished parsing, read 29396992 bytes from proof file\n\nc detected empty clause; start verification via backward checking\n\nc 1527 of 1527 clauses in core                            \n\nc 236600 of 469243 lemmas in core using 5056025 resolution steps\n\nc 0 RAT lemmas in core; 95758 redundant literals in core lemmas\n\ns VERIFIED\n\nc verification time: 6.309 seconds\n",
+                "verified_verdict": true
+              },
+              "verified": true,
+              "stdout_status_lines": [
+                "s UNSATISFIABLE"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/571a2f223784fb92a53b4cc8cc8b569e"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "or_randxor_k3_n520_m520.cnf",
+          "sha256": "feb7803c6ca33c3f8a9fe6424ab7b42a4df995fe5b1144da4b42ac8d0246882e",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/dynamic-lbd",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/or_randxor_k3_n520_m520.cnf",
+                "--proof",
+                "/tmp/tmpuh7_a4y_/or_randxor_k3_n520_m520.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpuh7_a4y_/or_randxor_k3_n520_m520.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.010569841000006,
+              "exit_code": 0,
+              "proof_bytes": 62272185,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 21765,
+                "conflicts": 614664,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 46222,
+                "decisions": 1437473,
+                "deleted_learnt_clauses": 599890,
+                "descriptor_compactions": 102,
+                "descriptor_scans": 5894112,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "lbd_improvements": 744449,
+                "learnt_clauses": 614664,
+                "live_clauses": 21765,
+                "max_trail": 548,
+                "parse_seconds": 0.003056353,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 62272185,
+                "propagations": 14857281,
+                "restarts": 1279,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000046452,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/4fdcf4248a332c1c9a89d37439c879a9"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "posixpath__joinrealpath_13.cnf",
+          "sha256": "7bae763eeb6a5581c41239e828cd125faa77ec7b9fc6c673fc7a221bfbb00367",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/dynamic-lbd",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/posixpath__joinrealpath_13.cnf",
+                "--proof",
+                "/tmp/tmpuh7_a4y_/posixpath__joinrealpath_13.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpuh7_a4y_/posixpath__joinrealpath_13.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.00996386700001,
+              "exit_code": 0,
+              "proof_bytes": 134560775,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 7025,
+                "conflicts": 468605,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 27042,
+                "decisions": 815272,
+                "deleted_learnt_clauses": 465871,
+                "descriptor_compactions": 78,
+                "descriptor_scans": 1910320,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "lbd_improvements": 608401,
+                "learnt_clauses": 468605,
+                "live_clauses": 7025,
+                "max_trail": 351,
+                "parse_seconds": 0.001813315,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 134560775,
+                "propagations": 18634984,
+                "restarts": 1021,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000073235,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/11db226d109e82f93aaa3b2604173ff9"
+        },
+        {
+          "expected": "SAT",
+          "instance": "vmpc_28.shuffled-as.sat05-1957.cnf",
+          "sha256": "00a06c68197e6b7bf0584335405878f15cfba81189cdfdb2dcfd46b464a8704e",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/dynamic-lbd",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/vmpc_28.shuffled-as.sat05-1957.cnf",
+                "--proof",
+                "/tmp/tmpuh7_a4y_/vmpc_28.shuffled-as.sat05-1957.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpuh7_a4y_/vmpc_28.shuffled-as.sat05-1957.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.058086011,
+              "exit_code": 0,
+              "proof_bytes": 46967845,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 120790,
+                "conflicts": 174258,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 585788,
+                "decisions": 371412,
+                "deleted_learnt_clauses": 165395,
+                "descriptor_compactions": 28,
+                "descriptor_scans": 3974257,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "lbd_improvements": 204726,
+                "learnt_clauses": 174258,
+                "live_clauses": 116943,
+                "max_trail": 784,
+                "parse_seconds": 0.039268895,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 46967845,
+                "propagations": 22255739,
+                "restarts": 474,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000134112,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/00f4aca773e5675f35263dcd46b15bde"
+        },
+        {
+          "expected": "UNSAT",
+          "instance": "rand_net70-40-10.shuffled.cnf",
+          "sha256": "da73c9daeaf05aed33180d8978f2675b38d4a7888e97dbc14922e3ec40b90756",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/dynamic-lbd",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/rand_net70-40-10.shuffled.cnf",
+                "--proof",
+                "/tmp/tmpuh7_a4y_/rand_net70-40-10.shuffled.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpuh7_a4y_/rand_net70-40-10.shuffled.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 0.3926708530000269,
+              "exit_code": 20,
+              "proof_bytes": 151891,
+              "result": "UNSAT",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 8407,
+                "conflicts": 86,
+                "congruence_and_gates": 119194,
+                "congruence_equivalences": 2733,
+                "congruence_rounds": 31,
+                "congruence_work": 2998797,
+                "decisions": 1742,
+                "deleted_learnt_clauses": 0,
+                "descriptor_compactions": 0,
+                "descriptor_scans": 0,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "lbd_improvements": 3,
+                "learnt_clauses": 85,
+                "live_clauses": 8407,
+                "max_trail": 2794,
+                "parse_seconds": 0.008347321,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 151891,
+                "propagations": 75689,
+                "restarts": 0,
+                "result": "UNSAT",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 0.374497109,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 0,
+                "vivify_attempts": 0,
+                "vivify_removed": 0,
+                "vivify_work": 0,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "command": [
+                  "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+                  "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/rand_net70-40-10.shuffled.cnf",
+                  "/tmp/tmpuh7_a4y_/rand_net70-40-10.shuffled.cnf.drat"
+                ],
+                "exit_code": 0,
+                "stderr": "",
+                "stdout": "\nc turning on binary mode checking\n\nc parsing input formula with 5600 variables and 16661 clauses\n\nc finished parsing, read 151891 bytes from proof file\n\nc detected empty clause; start verification via backward checking\n\nc 16520 of 16661 clauses in core                            \n\nc 13685 of 22900 lemmas in core using 35278 resolution steps\n\nc 0 RAT lemmas in core; 2 redundant literals in core lemmas\n\ns VERIFIED\n\nc verification time: 0.140 seconds\n",
+                "verified_verdict": true
+              },
+              "verified": true,
+              "stdout_status_lines": [
+                "s UNSATISFIABLE"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/00f2eb377986e7decbc863931680a3b2"
+        }
+      ]
+    },
+    {
+      "file": "watched-vmpc-recheck.json",
+      "flags": [
+        "--experimental-watched-vivify"
+      ],
+      "certification": {
+        "passed": true,
+        "violations": []
+      },
+      "environment": {
+        "kissat_proof_enabled": false,
+        "memory_gib": 4.0,
+        "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+        "python": "3.12.14",
+        "repository_commit": "UNAVAILABLE",
+        "time_limit_seconds": 15.0,
+        "toolchain": {
+          "drat_trim": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/drat-trim-bin",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "usage: drat-trim [INPUT] [<PROOF>] [<option> ...]\n\nwhere <option> is one of the following\n\n  -h          print this command line option summary\n  -c CORE     prints the unsatisfiable core to the file CORE (DIMACS format)\n  -a ACTIVE   prints the active clauses to the file ACTIVE (DIMACS format)\n  -l LEMMAS   prints the core lemmas to the file LEMMAS (DRAT format)\n  -L LEMMAS   prints the core lemmas to the file LEMMAS (LRAT format)\n  -r TRACE    resolution graph in the TRACE file (TRACECHECK format)\n\n  -t <lim>    time limit in seconds (default 40000)\n  -u          default unit propatation (i.e., no core-first)\n  -f          forward mode for UNSAT\n  -v          more verbose output\n  -b          show progress bar\n  -O          optimize proof till fixpoint by repeating verification\n  -C          compress core lemmas (emit binary proof)\n  -D          delete proof file after parsing\n  -I          force ASCII proof parse mode\n  -i          force binary proof parse mode\n  -w          suppress warning messages\n  -W          exit after first warning\n  -p          run in plain mode (i.e., ignore deletion information)\n\n  -R          turn off reduce mode\n\n  -S          run in SAT check mode (forward checking)\n\n  -U          only allow RUP additions\nand input and proof are specified as follows\n\n  INPUT       input file in DIMACS format\n  PROOF       proof file in DRAT format (stdin if no argument)"
+          },
+          "satsolv": {
+            "command": [
+              "/workspace/scratch/c12b5997b0eb/search-local/watched",
+              "--version"
+            ],
+            "exit_code": 0,
+            "output": "SatSolv 0.3.0"
+          }
+        },
+        "verification_time_limit_seconds": 180.0
+      },
+      "summary": {
+        "satsolv": {
+          "crashes": 0,
+          "geomean_solved_seconds": null,
+          "median_solved_seconds": null,
+          "par2": 30.0,
+          "solved": 0,
+          "solver_errors": 0,
+          "timeouts": 0,
+          "verification_failures": 0
+        }
+      },
+      "rows": [
+        {
+          "expected": "SAT",
+          "instance": "vmpc_28.shuffled-as.sat05-1957.cnf",
+          "sha256": "00a06c68197e6b7bf0584335405878f15cfba81189cdfdb2dcfd46b464a8704e",
+          "solvers": {
+            "satsolv": {
+              "command": [
+                "/workspace/scratch/c12b5997b0eb/search-local/watched",
+                "/workspace/scratch/c12b5997b0eb/satsolv-structural/benchmarks/cache/competition/vmpc_28.shuffled-as.sat05-1957.cnf",
+                "--proof",
+                "/tmp/tmpaopb6s6h/vmpc_28.shuffled-as.sat05-1957.cnf.drat",
+                "--stats-json",
+                "/tmp/tmpaopb6s6h/vmpc_28.shuffled-as.sat05-1957.cnf.json",
+                "--time-limit",
+                "15.0"
+              ],
+              "crashed": false,
+              "elapsed": 15.055184577999853,
+              "exit_code": 0,
+              "proof_bytes": 51741504,
+              "result": "UNKNOWN",
+              "stats": {
+                "binary_edges_scanned": 0,
+                "binary_literals_removed": 0,
+                "blocker_hits": 0,
+                "clause_descriptors": 116583,
+                "conflicts": 197541,
+                "congruence_and_gates": 0,
+                "congruence_equivalences": 0,
+                "congruence_rounds": 1,
+                "congruence_work": 585788,
+                "decisions": 425532,
+                "deleted_learnt_clauses": 193025,
+                "descriptor_compactions": 32,
+                "descriptor_scans": 4172020,
+                "eliminated_variables": 0,
+                "elimination_attempts": 0,
+                "elimination_work": 0,
+                "heap_updates": 0,
+                "lbd_improvements": 0,
+                "learnt_clauses": 197541,
+                "live_clauses": 112596,
+                "max_trail": 784,
+                "parse_seconds": 0.043294897,
+                "peak_heap_entries": 0,
+                "probed_units": 0,
+                "proof_bytes": 51741504,
+                "propagations": 26933641,
+                "restarts": 508,
+                "result": "UNKNOWN",
+                "seed": 1,
+                "simplified_literals": 0,
+                "solve_seconds": 15.000064575,
+                "subsumed_clauses": 0,
+                "tautological_resolvents": 0,
+                "vivified_clauses": 1585,
+                "vivify_attempts": 9156,
+                "vivify_removed": 1593,
+                "vivify_work": 23000000,
+                "watch_visits": 0
+              },
+              "stderr": "",
+              "timed_out": false,
+              "verification": {
+                "exit_code": null,
+                "stderr": "not run",
+                "stdout": ""
+              },
+              "verified": false,
+              "stdout_status_lines": [
+                "s UNKNOWN"
+              ]
+            }
+          },
+          "source": "http://benchmark-database.de/file/00f4aca773e5675f35263dcd46b15bde"
+        }
+      ]
+    }
+  ]
+}
