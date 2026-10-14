@@ -81,6 +81,31 @@ struct SolverSearchTestAccess {
         solver.reason_bump_epoch_ = std::numeric_limits<std::uint64_t>::max();
         solver.bump_reason_variables({-4}); assert(solver.stats_.reason_bumps == 4);
     }
+
+    static void delayed_activation() {
+        SolverConfig config; config.rank_lbd = config.target_phases = config.reason_bump = config.recent_use = true;
+        config.search_warmup = 1000;
+        Solver solver(config); solver.reset(4);
+        assert(!solver.search_active_);
+        const int cid = solver.add_clause({1, 2, 3}, true, 3);
+        auto& c = solver.clauses_[static_cast<std::size_t>(cid)];
+        assert(c.lbd == 3 && !solver.protected_clause(c));
+        solver.stats_.conflicts = 1000;
+        solver.activate_search();
+        assert(c.lbd == 2 && c.birth_lbd == 3 && !solver.protected_clause(c));
+        assert(solver.search_active_ && solver.stats_.search_activations == 1);
+        assert(solver.next_target_reset_ == 1000 + config.target_window);
+        solver.activate_search(); assert(solver.stats_.search_activations == 1);
+        const int fresh = solver.add_clause({1,2,4}, true, 3);
+        assert(solver.clauses_[static_cast<std::size_t>(fresh)].lbd == 2);
+        solver.reset(4); assert(!solver.search_active_ && solver.stats_.search_activations == 0);
+        solver.config_.search_warmup = 0;
+        solver.config_.search_warmup_seconds = 1.0;
+        solver.start_time_ = std::chrono::steady_clock::now();
+        solver.maybe_activate_search(); assert(!solver.search_active_);
+        solver.start_time_ -= std::chrono::seconds(2);
+        solver.maybe_activate_search(); assert(solver.search_active_ && solver.stats_.search_activations == 1);
+    }
 };
 }
 
@@ -88,6 +113,7 @@ int main() {
     satsolv::SolverSearchTestAccess::scores_and_tiers();
     satsolv::SolverSearchTestAccess::recent_use_and_locks();
     satsolv::SolverSearchTestAccess::targets_and_reason_budget();
+    satsolv::SolverSearchTestAccess::delayed_activation();
     satsolv::SolverConfig config; config.rank_lbd = config.dynamic_lbd = true;
     bool rejected = false;
     try { satsolv::Solver solver(config); } catch (const std::invalid_argument&) { rejected = true; }

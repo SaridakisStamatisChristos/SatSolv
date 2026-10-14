@@ -17,6 +17,8 @@ std::uint64_t seed_hash(std::uint64_t x) noexcept {
 
 
 Solver::Solver(SolverConfig config) : config_(config) {
+    if (!std::isfinite(config_.search_warmup_seconds) || config_.search_warmup_seconds < 0.0)
+        throw std::invalid_argument("invalid search warmup time");
     if (config_.rank_lbd && config_.dynamic_lbd)
         throw std::invalid_argument("rank LBD and legacy dynamic LBD are mutually exclusive");
     if (config_.target_phases && config_.target_window == 0)
@@ -97,6 +99,7 @@ void Solver::reset(int variables) {
     target_depth_ = 0; target_shared_prefix_ = 0;
     next_target_reset_ = target_window_ = config_.target_window;
     reason_bump_epoch_ = 0;
+    search_active_ = config_.search_warmup == 0 && config_.search_warmup_seconds == 0.0;
     order_heap_.reset(activity_, heap_rank_);
     var_inc_ = 1.0;
     clause_inc_ = 1.0;
@@ -162,7 +165,7 @@ int Solver::add_clause(const std::vector<int>& input, bool learnt, int lbd) {
     clause.birth_lbd = lbd;
     // First-UIP learning has one unique current level, occupied by its UIP.
     // Rank policy counts antecedent levels, excluding that implied variable.
-    clause.lbd = learnt && config_.rank_lbd ? std::max(1, lbd - 1) : lbd;
+    clause.lbd = learnt && config_.rank_lbd && search_active_ ? std::max(1, lbd - 1) : lbd;
     literal_arena_.insert(literal_arena_.end(), source->begin(), source->end());
     clauses_.push_back(clause);
     if (learnt) learnt_ids_.push_back(cid);
@@ -432,7 +435,7 @@ int Solver::pick_branch_lit() {
     while (!order_heap_.empty()) {
         const int v = order_heap_.pop();
         if (assigns_[static_cast<std::size_t>(v)] != -1 || decision_enabled_[static_cast<std::size_t>(v)] == 0) continue;
-        if (config_.target_phases && target_phase_[static_cast<std::size_t>(v)] >= 0) {
+        if (config_.target_phases && search_active_ && target_phase_[static_cast<std::size_t>(v)] >= 0) {
             ++stats_.target_decisions;
             return target_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
         }
@@ -452,6 +455,29 @@ void Solver::capture_target() {
     }
     target_shared_prefix_ = target_depth_ = trail_.size();
     ++stats_.target_captures;
+}
+
+void Solver::activate_search() {
+    if (search_active_) return;
+    search_active_ = true; ++stats_.search_activations;
+    if (config_.rank_lbd) {
+        // Before activation these clauses used the unchanged birth score.
+        // Normalize every live rank once; protected admission stays immutable.
+        for (int cid : learnt_ids_) {
+            Clause& c = clauses_[static_cast<std::size_t>(cid)];
+            c.lbd = std::max(1, c.birth_lbd - 1);
+        }
+    }
+    const auto limit = std::numeric_limits<std::uint64_t>::max();
+    next_target_reset_ = target_window_ > limit - stats_.conflicts ? limit : stats_.conflicts + target_window_;
+}
+
+void Solver::maybe_activate_search() {
+    if (search_active_ || !(config_.rank_lbd || config_.dynamic_lbd || config_.target_phases || config_.reason_bump || config_.recent_use)) return;
+    const bool conflict_budget = config_.search_warmup > 0 && stats_.conflicts >= config_.search_warmup;
+    const bool time_budget = config_.search_warmup_seconds > 0.0 &&
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time_).count() >= config_.search_warmup_seconds;
+    if (conflict_budget || time_budget) activate_search();
 }
 
 int Solver::compute_antecedent_lbd(const Clause& clause, int implied_variable) {
@@ -625,8 +651,8 @@ void Solver::analyze(int conflict_clause, std::vector<int>& learnt, int& backtra
         Clause& c = clauses_[static_cast<std::size_t>(cid)];
         if (c.deleted) throw std::logic_error("conflict analysis reached deleted clause");
         if (c.learnt) c.activity += clause_inc_;
-        if (config_.recent_use && c.learnt) c.used = true;
-        if (config_.dynamic_lbd && c.learnt && c.lbd > 2) {
+        if (config_.recent_use && search_active_ && c.learnt) c.used = true;
+        if (config_.dynamic_lbd && search_active_ && c.learnt && c.lbd > 2) {
             ++level_epoch_;
             if (level_epoch_ == 0) { std::fill(level_marks_.begin(), level_marks_.end(), 0); level_epoch_ = 1; }
             int distinct = 0;
@@ -640,7 +666,7 @@ void Solver::analyze(int conflict_clause, std::vector<int>& learnt, int& backtra
                 if (distinct <= 2) ++stats_.lbd_tier_crossings;
                 c.lbd = distinct; ++stats_.lbd_improvements;
             }
-        } else if (config_.rank_lbd && c.learnt && p != 0 && c.lbd > 1) {
+        } else if (config_.rank_lbd && search_active_ && c.learnt && p != 0 && c.lbd > 1) {
             // A conflicting clause has no singled-out implied variable. Update
             // only actual reasons, with the same antecedent convention as birth.
             const int score = compute_antecedent_lbd(c, var(p));
@@ -672,7 +698,7 @@ void Solver::analyze(int conflict_clause, std::vector<int>& learnt, int& backtra
 
     learnt[0] = -p;
     minimize_clause(learnt);
-    if (config_.reason_bump) bump_reason_variables(learnt);
+    if (config_.reason_bump && search_active_) bump_reason_variables(learnt);
 
     backtrack = 0;
     if (learnt.size() > 1) {
@@ -743,7 +769,7 @@ void Solver::reduce_database() {
         const bool critical = protected_clause(c);
         if (critical) { ++protected_count; protected_literals += c.size; }
         if (c.size <= 2 || c.birth_lbd <= 2) ++birth_count;
-        const bool used = config_.recent_use && c.used;
+        const bool used = config_.recent_use && search_active_ && c.used;
         c.used = false;
         if (critical || clause_locked(cid)) continue;
         if (used) { ++stats_.recent_use_kept; continue; }
@@ -939,6 +965,8 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
                     break;
                 }
 
+                if (!search_active_) maybe_activate_search();
+
                 conflict = propagate();
                 if (conflict == -2) {
                     output.result = SolveResult::Unknown;
@@ -955,6 +983,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
                     }
 
                     int backtrack = 0;
+                    if (!search_active_) maybe_activate_search();
                     analyze(conflict, learnt, backtrack);
                     const int lbd = compute_lbd(learnt);
                     ++stats_.birth_lbd_histogram[static_cast<std::size_t>(std::min(15, lbd))];
@@ -970,7 +999,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
                         throw std::logic_error("asserting learnt clause did not assert");
                     }
                     decay_activities();
-                    if (config_.target_phases && stats_.conflicts >= next_target_reset_) {
+                    if (config_.target_phases && search_active_ && stats_.conflicts >= next_target_reset_) {
                         target_depth_ = 0; ++stats_.target_resets;
                         const auto limit = std::numeric_limits<std::uint64_t>::max();
                         const auto increment = std::max<std::uint64_t>(1, target_window_ / 2);
@@ -996,7 +1025,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
                     continue;
                 }
 
-                if (config_.target_phases) capture_target();
+                if (config_.target_phases && search_active_) capture_target();
                 const int decision = pick_branch_lit();
                 if (decision == 0) {
                     output.result = SolveResult::Sat;

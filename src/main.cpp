@@ -48,6 +48,8 @@ void usage(std::ostream& os) {
           "  --experimental-recent-use one-round conflict-use clause protection\n"
           "  --target-window <n>  initial target reset interval (default: 10000)\n"
           "  --reason-bump-budget <n> maximum inspected reason literals per conflict\n"
+          "  --search-warmup <n> defer experimental search policies by conflicts\n"
+          "  --search-warmup-seconds <sec> alternative elapsed activation budget\n"
           "  --eliminate-budget <n> resolution work limit\n"
           "  --vivify-budget <n>  initial watched-vivification work limit\n"
           "  --experimental-simplify enable previous bounded simplifier\n"
@@ -124,6 +126,7 @@ void write_stats_json(const std::filesystem::path& path,
         << "  \"target_resets\": " << s.target_resets << ",\n"
         << "  \"reason_bump_scans\": " << s.reason_bump_scans << ",\n"
         << "  \"reason_bumps\": " << s.reason_bumps << ",\n"
+        << "  \"search_activations\": " << s.search_activations << ",\n"
         << "  \"subsumed_clauses\": " << s.subsumed_clauses << ",\n"
         << "  \"probed_units\": " << s.probed_units << ",\n"
         << "  \"vivified_clauses\": " << s.vivified_clauses << ",\n"
@@ -162,7 +165,7 @@ int main(int argc, char** argv) {
             std::string arg = argv[i];
             if (arg == "--help") { usage(std::cout); return 0; }
             if (arg == "--version") { std::cout << "SatSolv 0.3.0\n"; return 0; }
-            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget") {
+            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget" || arg == "--search-warmup" || arg == "--search-warmup-seconds") {
                 if (++i >= argc) throw std::invalid_argument("missing value for " + arg);
                 std::string value = argv[i];
                 if (arg == "--proof") proof = std::filesystem::path(value);
@@ -172,6 +175,8 @@ int main(int argc, char** argv) {
                 else if (arg == "--eliminate-budget") config.eliminate_budget = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--target-window") config.target_window = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--reason-bump-budget") config.reason_bump_budget = integer_option<std::uint64_t>(value, arg);
+                else if (arg == "--search-warmup") config.search_warmup = integer_option<std::uint64_t>(value, arg);
+                else if (arg == "--search-warmup-seconds") config.search_warmup_seconds = time_option(value);
                 else if (arg == "--time-limit") config.time_limit_seconds = time_option(value);
                 else stats_json = std::filesystem::path(value);
                 continue;

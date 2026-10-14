@@ -15,16 +15,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arm: legacy-fixed
-            flags: --experimental-dynamic-lbd --experimental-fixed-lbd-tier
           - arm: rank
             flags: --experimental-rank-lbd
-          - arm: rank-recent
-            flags: --experimental-rank-lbd --experimental-recent-use
-          - arm: target
-            flags: --experimental-target-phases
-          - arm: target-reason
-            flags: --experimental-target-phases --experimental-reason-bump
+          - arm: rank-recent-delayed
+            flags: --experimental-rank-lbd --experimental-recent-use --search-warmup 1000000 --search-warmup-seconds 15
+          - arm: target-delayed
+            flags: --experimental-target-phases --search-warmup 1000000 --search-warmup-seconds 15
+          - arm: target-reason-delayed
+            flags: --experimental-target-phases --experimental-reason-bump --search-warmup 1000000 --search-warmup-seconds 15
+          - arm: recent-delayed
+            flags: --experimental-recent-use --search-warmup 1000000 --search-warmup-seconds 15
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
@@ -69,7 +69,7 @@ jobs:
           from pathlib import Path
           src=json.loads(Path('benchmarks/competition_manifest.json').read_text())
           out=Path('benchmarks/results/core-search')
-          pins={'control':'f997df1bec87f045ffa48d16ab50729cd90e9a0e','control_flags':[],'candidate_flags':'${{ matrix.flags }}'.split(),'candidate':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'limits':{'solver_seconds':60,'memory_gib':4,'proof_seconds':300},'ordering':'alternate arms by frozen instance index','manifest_sha256':hashlib.sha256(Path('benchmarks/competition_manifest.json').read_bytes()).hexdigest()}
+          pins={'control':'f997df1bec87f045ffa48d16ab50729cd90e9a0e','control_flags':[],'candidate_flags':'${{ matrix.flags }}'.split(),'candidate':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'limits':{'solver_seconds':60,'memory_gib':4,'proof_seconds':300},'ordering':'alternate arms by frozen instance index','binary_sha256':{'control':hashlib.sha256(Path('/tmp/structural-control/build/satsolv').read_bytes()).hexdigest(),'candidate':hashlib.sha256(Path('build/satsolv').read_bytes()).hexdigest()},'manifest_sha256':hashlib.sha256(Path('benchmarks/competition_manifest.json').read_bytes()).hexdigest()}
           (out/'pins.json').write_text(json.dumps(pins,indent=2)+'\n')
           for i,item in enumerate(src['instances']):
               m=Path('/tmp/search-one.json');m.write_text(json.dumps({'instances':[item]}))

@@ -29,10 +29,10 @@ jobs:
         include:
           - arm: rank
             flags: --experimental-rank-lbd
-          - arm: rank-recent
-            flags: --experimental-rank-lbd --experimental-recent-use
-          - arm: target-reason
-            flags: --experimental-target-phases --experimental-reason-bump
+          - arm: rank-recent-delayed
+            flags: --experimental-rank-lbd --experimental-recent-use --search-warmup 1000000 --search-warmup-seconds 15
+          - arm: target-reason-delayed
+            flags: --experimental-target-phases --experimental-reason-bump --search-warmup 1000000 --search-warmup-seconds 15
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:

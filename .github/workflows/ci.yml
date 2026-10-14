@@ -97,6 +97,8 @@ jobs:
             benchmarks/results/ci-smoke.md
             benchmarks/results/core-search-pressure/*.json
             benchmarks/results/core-search-pressure/*.verification.log
+            benchmarks/results/core-search-pressure/*.drat
+            benchmarks/results/core-search-pressure/*.cnf
           if-no-files-found: ignore
 
   sanitizers:

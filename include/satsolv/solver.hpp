@@ -41,6 +41,8 @@ struct SolverConfig {
     bool recent_use = false;
     std::uint64_t target_window = 10000;
     std::uint64_t reason_bump_budget = 128;
+    std::uint64_t search_warmup = 0;
+    double search_warmup_seconds = 0.0;
     std::uint64_t eliminate_budget = 8000000;
     std::uint64_t vivify_budget = 16000000;
     std::uint64_t congruence_budget = 4000000;
@@ -89,6 +91,7 @@ struct SolverStats {
     std::uint64_t target_resets = 0;
     std::uint64_t reason_bump_scans = 0;
     std::uint64_t reason_bumps = 0;
+    std::uint64_t search_activations = 0;
     std::array<std::uint64_t, 16> birth_lbd_histogram{};
     std::array<std::uint64_t, 16> reuse_score_histogram{};
     std::uint64_t subsumed_clauses = 0;
@@ -165,6 +168,7 @@ private:
     std::uint64_t target_window_ = 0;
     std::vector<std::uint64_t> reason_bump_marks_;
     std::uint64_t reason_bump_epoch_ = 0;
+    bool search_active_ = true;
     IndexedHeap order_heap_;
     double var_inc_ = 1.0;
     double clause_inc_ = 1.0;
@@ -214,6 +218,8 @@ private:
     bool protected_clause(const Clause& clause) const noexcept;
     void capture_target();
     void bump_reason_variables(const std::vector<int>& learnt);
+    void activate_search();
+    void maybe_activate_search();
     void minimize_clause(std::vector<int>& clause);
     void reduce_database();
     bool clause_locked(int cid) const noexcept;
