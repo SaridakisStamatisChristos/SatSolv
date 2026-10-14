@@ -105,6 +105,9 @@ void Solver::reset(int variables) {
     restart_index_ = 1;
     conflicts_since_restart_ = 0;
     next_restart_ = static_cast<std::uint64_t>(config_.restart_base) * luby(restart_index_);
+    vivify_ignored_ = -1;
+    vivify_left_ = 0;
+    next_vivify_ = 2000;
     for (int v = 1; v <= variables; ++v) {
         if (config_.seed != 1) saved_phase_[static_cast<std::size_t>(v)] = static_cast<std::int8_t>(seed_hash(heap_rank_[static_cast<std::size_t>(v)]) & 1ULL);
         order_heap_.update(v);
@@ -197,13 +200,24 @@ bool Solver::enqueue(int lit, int reason) {
 }
 
 int Solver::propagate() {
+    return propagate_impl<false>();
+}
+
+template<bool Vivifying> int Solver::propagate_impl() {
+    [[maybe_unused]] const auto charge = [this]() {
+        if (vivify_left_ == 0) return false;
+        --vivify_left_; ++stats_.vivify_work;
+        return (stats_.vivify_work & 1023U) != 0U || !timed_out();
+    };
     while (qhead_ < trail_.size()) {
+        if constexpr (Vivifying) { if (!charge()) return -3; }
         const int p = trail_[qhead_++];
         ++stats_.propagations;
         const std::size_t false_index = static_cast<std::size_t>(lit_index(-p));
 
         const auto& binary = binary_watches_[false_index];
         for (const BinaryWatcher& watcher : binary) {
+            if constexpr (Vivifying) { if (!charge()) return -3; }
             // Binary clauses are never reduced; the watcher is the implication.
             const int value = value_lit(watcher.implied);
             if (value == 0) return watcher.clause;
@@ -213,6 +227,10 @@ int Solver::propagate() {
         auto& ws = watches_[false_index];
         std::size_t i = 0;
         while (i < ws.size()) {
+            if constexpr (Vivifying) {
+                if (!charge()) return -3;
+                if (ws[i].clause == vivify_ignored_) { ++i; continue; }
+            }
             if (config_.telemetry) ++stats_.watch_visits;
             if (value_lit(ws[i].blocker) == 1) {
                 if (config_.telemetry) ++stats_.blocker_hits;
@@ -245,11 +263,13 @@ int Solver::propagate() {
             }
 
             bool moved = false;
+            [[maybe_unused]] bool exhausted = false;
             std::size_t start = static_cast<std::size_t>(c.scan_cursor);
             if (start < 2 || start >= static_cast<std::size_t>(c.size)) start = 2;
 
             auto try_range = [&](std::size_t begin, std::size_t end) {
                 for (std::size_t k = begin; k < end; ++k) {
+                    if constexpr (Vivifying) { if (!charge()) { exhausted = true; return; } }
                     const int candidate = clause_lit(c, k);
                     if (value_lit(candidate) == 0) continue;
 
@@ -266,7 +286,8 @@ int Solver::propagate() {
             };
 
             try_range(start, static_cast<std::size_t>(c.size));
-            if (!moved && start > 2) try_range(2, start);
+            if (!moved && !exhausted && start > 2) try_range(2, start);
+            if constexpr (Vivifying) { if (exhausted) return -3; }
             if (moved) continue;
 
             const int other_value = value_lit(other_lit);
@@ -278,6 +299,93 @@ int Solver::propagate() {
         if ((stats_.propagations & 0x3FFFU) == 0U && timed_out()) return -2;
     }
     return -1;
+}
+
+int Solver::vivify_database(std::uint64_t budget) {
+    if (decision_level() != 0) throw std::logic_error("vivification requires root level");
+    if (budget == 0 || nvars_ > 200000 || clauses_.size() > 1000000 || literal_arena_.size() > 4000000 || timed_out())
+        return timed_out() ? -2 : -1;
+    const auto phases = saved_phase_;
+    vivify_left_ = budget;
+    std::vector<int> candidates;
+    for (std::size_t i = 0; i < clauses_.size(); ++i) {
+        const Clause& c = clauses_[i];
+        if (!c.deleted && c.size >= 3 && c.size <= 64 && c.reason_refs == 0 && (!c.learnt || c.lbd <= 6))
+            candidates.push_back(static_cast<int>(i));
+    }
+    std::stable_sort(candidates.begin(), candidates.end(), [this](int a, int b) {
+        const Clause& x = clauses_[static_cast<std::size_t>(a)];
+        const Clause& y = clauses_[static_cast<std::size_t>(b)];
+        if (x.learnt != y.learnt) return x.learnt;
+        return x.size < y.size;
+    });
+    std::vector<int> original, shortened;
+    int root_conflict = -1;
+    for (int cid : candidates) {
+        if (vivify_left_ == 0 || timed_out()) break;
+        const Clause& c = clauses_[static_cast<std::size_t>(cid)];
+        if (c.deleted || c.reason_refs != 0) continue;
+        original.clear();
+        bool satisfied = false;
+        for (std::size_t k = 0; k < c.size; ++k) {
+            const int lit = clause_lit(c, k);
+            original.push_back(lit);
+            if (value_lit(lit) == 1) satisfied = true;
+        }
+        if (satisfied) continue;
+        ++stats_.vivify_attempts;
+        // Decisions are temporary assumptions. The candidate itself is ignored;
+        // completed propagation is the only source of strengthening evidence.
+        vivify_ignored_ = cid;
+        trail_lim_.push_back(trail_.size());
+        shortened.clear();
+        bool complete = true;
+        for (int lit : original) {
+            if (vivify_left_ == 0 || timed_out()) { complete = false; break; }
+            --vivify_left_; ++stats_.vivify_work;
+            const int val = value_lit(lit);
+            if (val == 0) continue;
+            shortened.push_back(lit);
+            if (val == 1) break;
+            if (!enqueue(-lit, -1)) throw std::logic_error("vivification assumption conflict");
+            const int conflict = propagate_impl<true>();
+            if (conflict == -2 || conflict == -3) { complete = false; break; }
+            if (conflict >= 0) break;
+        }
+        cancel_until(0);
+        vivify_ignored_ = -1;
+        if (!complete || shortened.size() >= original.size()) continue;
+        // Addition must precede deletion. If all literals were visited without
+        // conflict, the original clause plus the skipped implications supports
+        // the shortened clause by RUP as well.
+        log_clause(shortened);
+        Clause& old = clauses_[static_cast<std::size_t>(cid)];
+        const bool learnt = old.learnt;
+        const int lbd = old.lbd;
+        const double activity = old.activity;
+        if (old.reason_refs != 0) throw std::logic_error("vivification removed a locked reason");
+        log_record(original, true);
+        old.deleted = true; ++dead_descriptors_; dead_literals_ += old.size;
+        ++stats_.vivified_clauses;
+        stats_.vivify_removed += original.size() - shortened.size();
+        const int replacement = add_clause(shortened, learnt, lbd);
+        clauses_[static_cast<std::size_t>(replacement)].activity = activity;
+        if (root_unsat_) { root_conflict = replacement; break; }
+        if (shortened.size() == 1 && !enqueue(shortened[0], replacement)) { root_conflict = replacement; break; }
+        // New watches must see all persistent roots, including roots whose
+        // propagation predates replacement. Never rely on old watch positions.
+        qhead_ = 0;
+        root_conflict = propagate();
+        if (root_conflict != -1) break;
+    }
+    cancel_until(0);
+    vivify_ignored_ = -1;
+    saved_phase_ = phases;
+    learnt_ids_.erase(std::remove_if(learnt_ids_.begin(), learnt_ids_.end(), [this](int cid) {
+        return clauses_[static_cast<std::size_t>(cid)].deleted;
+    }), learnt_ids_.end());
+    if (root_conflict != -1) return root_conflict;
+    return timed_out() ? -2 : -1;
 }
 
 void Solver::cancel_until(int level) {
@@ -439,6 +547,17 @@ void Solver::analyze(int conflict_clause, std::vector<int>& learnt, int& backtra
         Clause& c = clauses_[static_cast<std::size_t>(cid)];
         if (c.deleted) throw std::logic_error("conflict analysis reached deleted clause");
         if (c.learnt) c.activity += clause_inc_;
+        if (config_.dynamic_lbd && c.learnt && c.lbd > 2) {
+            ++level_epoch_;
+            if (level_epoch_ == 0) { std::fill(level_marks_.begin(), level_marks_.end(), 0); level_epoch_ = 1; }
+            int distinct = 0;
+            for (std::size_t k = 0; k < c.size; ++k) {
+                const auto level = static_cast<std::size_t>(levels_[static_cast<std::size_t>(var(clause_lit(c,k)))]);
+                if (level == 0 || level_marks_[level] == level_epoch_) continue;
+                level_marks_[level] = level_epoch_; ++distinct;
+            }
+            if (distinct < c.lbd) { c.lbd = distinct; ++stats_.lbd_improvements; }
+        }
 
         for (std::size_t i = 0; i < static_cast<std::size_t>(c.size); ++i) {
             const int q = clause_lit(c, i);
@@ -627,6 +746,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     }
     CongruenceResult congruent;
     SimplifyResult simplified;
+    SimplifyResult eliminated;
     const Formula* input = &formula;
     if (config_.congruence) {
         congruent = simplify_congruence(formula, config_.congruence_budget,
@@ -642,6 +762,19 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
                 if (var(congruent.representatives[static_cast<std::size_t>(v)]) != v) decision_enabled_[static_cast<std::size_t>(v)] = 0;
         }
     }
+    if (config_.bounded_eliminate) {
+        eliminated = eliminate_bounded(*input, config_.eliminate_budget,
+            [this](const std::vector<int>& clause) { log_clause(clause); },
+            [this]() { return timed_out(); });
+        if (eliminated.applied) {
+            input = &eliminated.formula;
+            stats_.eliminated_variables = eliminated.eliminations.size();
+            stats_.elimination_work = eliminated.elimination_work;
+            stats_.elimination_attempts = eliminated.elimination_attempts;
+            stats_.tautological_resolvents = eliminated.tautological_resolvents;
+            for (const auto& e : eliminated.eliminations) decision_enabled_[static_cast<std::size_t>(e.variable)] = 0;
+        }
+    }
     if (config_.simplify) {
         simplified = simplify_formula(*input, config_.simplify_budget,
             [this](const std::vector<int>& clause) { log_clause(clause); },
@@ -649,7 +782,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
         if (simplified.applied) {
             input = &simplified.formula;
             stats_.simplified_literals = simplified.removed_literals;
-            stats_.eliminated_variables = simplified.eliminations.size();
+            stats_.eliminated_variables += simplified.eliminations.size();
             stats_.subsumed_clauses = simplified.subsumed;
             stats_.probed_units = simplified.probed_units;
             stats_.vivified_clauses = simplified.vivified;
@@ -689,6 +822,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
         output.result = SolveResult::Unsat;
     } else {
         int conflict = propagate();
+        if (conflict == -1 && config_.watched_vivify) conflict = vivify_database(config_.vivify_budget);
         if (conflict == -2) {
             output.result = SolveResult::Unknown;
         } else if (conflict >= 0) {
@@ -742,6 +876,13 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
                         ++restart_index_;
                         conflicts_since_restart_ = 0;
                         next_restart_ = static_cast<std::uint64_t>(config_.restart_base) * luby(restart_index_);
+                        if (config_.watched_vivify && stats_.conflicts >= next_vivify_) {
+                            next_vivify_ *= 2;
+                            conflict = propagate();
+                            if (conflict == -1) conflict = vivify_database(config_.vivify_budget / 16);
+                            if (conflict == -2) { output.result = SolveResult::Unknown; break; }
+                            if (conflict >= 0) { log_empty(); output.result = SolveResult::Unsat; break; }
+                        }
                     }
                     continue;
                 }
@@ -765,6 +906,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     }
 
     if (output.result == SolveResult::Sat && simplified.applied) extend_model(output.model, simplified.eliminations);
+    if (output.result == SolveResult::Sat && eliminated.applied) extend_model(output.model, eliminated.eliminations);
     if (output.result == SolveResult::Sat && congruent.applied) restore_equivalent_model(output.model, congruent.representatives);
     if (proof_enabled_) {
         flush_proof(); proof_.flush();

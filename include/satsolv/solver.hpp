@@ -30,6 +30,11 @@ struct SolverConfig {
     bool simplify = false;
     bool telemetry = false;
     bool congruence = true;
+    bool watched_vivify = false;
+    bool bounded_eliminate = false;
+    bool dynamic_lbd = false;
+    std::uint64_t eliminate_budget = 8000000;
+    std::uint64_t vivify_budget = 16000000;
     std::uint64_t congruence_budget = 4000000;
     std::uint64_t binary_minimize_budget = 128;
     std::uint64_t simplify_budget = 1000000;
@@ -60,9 +65,16 @@ struct SolverStats {
     std::uint64_t binary_literals_removed = 0;
     std::uint64_t simplified_literals = 0;
     std::uint64_t eliminated_variables = 0;
+    std::uint64_t elimination_work = 0;
+    std::uint64_t elimination_attempts = 0;
+    std::uint64_t tautological_resolvents = 0;
+    std::uint64_t lbd_improvements = 0;
     std::uint64_t subsumed_clauses = 0;
     std::uint64_t probed_units = 0;
     std::uint64_t vivified_clauses = 0;
+    std::uint64_t vivify_attempts = 0;
+    std::uint64_t vivify_work = 0;
+    std::uint64_t vivify_removed = 0;
     std::uint64_t live_clauses = 0;
     std::uint64_t clause_descriptors = 0;
 
@@ -141,6 +153,9 @@ private:
     std::uint64_t restart_index_ = 1;
     std::uint64_t conflicts_since_restart_ = 0;
     std::uint64_t next_restart_ = 100;
+    int vivify_ignored_ = -1;
+    std::uint64_t vivify_left_ = 0;
+    std::uint64_t next_vivify_ = 2000;
 
     static int var(int lit) noexcept { return lit < 0 ? -lit : lit; }
     int lit_index(int lit) const noexcept;
@@ -154,6 +169,8 @@ private:
     int add_clause(const std::vector<int>& lits, bool learnt, int lbd = 0);
     bool enqueue(int lit, int reason);
     int propagate();
+    template<bool Vivifying> int propagate_impl();
+    int vivify_database(std::uint64_t budget);
     void cancel_until(int level);
     int pick_branch_lit();
     void bump_variable(int variable);

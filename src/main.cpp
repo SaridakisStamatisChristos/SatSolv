@@ -38,6 +38,11 @@ void usage(std::ostream& os) {
           "  --reduce-interval <n> learned-clause reduction interval (default: 2000)\n"
           "  --time-limit <sec>   wall-clock limit; 0 means unlimited\n"
           "  --no-congruence      ablate SCC/AND-gate congruence\n"
+          "  --experimental-watched-vivify enable bounded watched vivification\n"
+          "  --experimental-eliminate enable clause-non-growing bounded resolution\n"
+          "  --experimental-dynamic-lbd update learnt quality on reuse\n"
+          "  --eliminate-budget <n> resolution work limit\n"
+          "  --vivify-budget <n>  initial watched-vivification work limit\n"
           "  --experimental-simplify enable previous bounded simplifier\n"
           "  --experimental-binary-minimize enable previous minimizer\n"
           "  --experimental-clause-decay enable previous recency policy\n"
@@ -96,9 +101,16 @@ void write_stats_json(const std::filesystem::path& path,
         << "  \"binary_literals_removed\": " << s.binary_literals_removed << ",\n"
         << "  \"simplified_literals\": " << s.simplified_literals << ",\n"
         << "  \"eliminated_variables\": " << s.eliminated_variables << ",\n"
+        << "  \"elimination_work\": " << s.elimination_work << ",\n"
+        << "  \"elimination_attempts\": " << s.elimination_attempts << ",\n"
+        << "  \"tautological_resolvents\": " << s.tautological_resolvents << ",\n"
+        << "  \"lbd_improvements\": " << s.lbd_improvements << ",\n"
         << "  \"subsumed_clauses\": " << s.subsumed_clauses << ",\n"
         << "  \"probed_units\": " << s.probed_units << ",\n"
         << "  \"vivified_clauses\": " << s.vivified_clauses << ",\n"
+        << "  \"vivify_attempts\": " << s.vivify_attempts << ",\n"
+        << "  \"vivify_work\": " << s.vivify_work << ",\n"
+        << "  \"vivify_removed\": " << s.vivify_removed << ",\n"
         << "  \"live_clauses\": " << s.live_clauses << ",\n"
         << "  \"clause_descriptors\": " << s.clause_descriptors << "\n"
         << "}\n";
@@ -124,17 +136,22 @@ int main(int argc, char** argv) {
             std::string arg = argv[i];
             if (arg == "--help") { usage(std::cout); return 0; }
             if (arg == "--version") { std::cout << "SatSolv 0.3.0\n"; return 0; }
-            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval") {
+            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget") {
                 if (++i >= argc) throw std::invalid_argument("missing value for " + arg);
                 std::string value = argv[i];
                 if (arg == "--proof") proof = std::filesystem::path(value);
                 else if (arg == "--seed") config.seed = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--reduce-interval") config.reduce_interval = integer_option<int>(value, arg);
+                else if (arg == "--vivify-budget") config.vivify_budget = integer_option<std::uint64_t>(value, arg);
+                else if (arg == "--eliminate-budget") config.eliminate_budget = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--time-limit") config.time_limit_seconds = time_option(value);
                 else stats_json = std::filesystem::path(value);
                 continue;
             }
             if (arg == "--no-congruence") { config.congruence = false; continue; }
+            if (arg == "--experimental-watched-vivify") { config.watched_vivify = true; continue; }
+            if (arg == "--experimental-eliminate") { config.bounded_eliminate = true; continue; }
+            if (arg == "--experimental-dynamic-lbd") { config.dynamic_lbd = true; continue; }
             if (arg == "--experimental-simplify") { config.simplify = true; continue; }
             if (arg == "--experimental-binary-minimize") { config.binary_minimize = true; continue; }
             if (arg == "--experimental-clause-decay") { config.clause_decay = 0.999; continue; }
