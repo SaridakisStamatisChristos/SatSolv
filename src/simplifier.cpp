@@ -63,7 +63,7 @@ SimplifyResult simplify_formula(const Formula& input, std::uint64_t budget,
     // when a bounded workspace would not fit; this is a complete, safe fallback.
     std::uint64_t original_literals = 0;
     for (const auto& c : input.clauses) original_literals += c.size();
-    if (budget == 0 || original_literals > 2000000 || input.variables > 200000 || interrupted()) return result;
+    if (budget == 0 || original_literals > 2000000 || input.variables > 200000 || input.clauses.size() > 1000000 || interrupted()) return result;
     result.applied = true; result.formula.variables = input.variables;
     auto& clauses = result.formula.clauses;
     clauses.reserve(input.clauses.size());

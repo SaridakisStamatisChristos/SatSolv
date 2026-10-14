@@ -606,6 +606,14 @@ std::uint64_t Solver::luby(std::uint64_t index) {
 }
 
 SolveOutput Solver::solve(const Formula& formula, const std::optional<std::filesystem::path>& proof_path) {
+    start_time_ = std::chrono::steady_clock::now();
+    if (formula.variables < 0 || formula.variables > std::numeric_limits<int>::max()/2)
+        throw std::invalid_argument("invalid formula variable count");
+    for (const auto& clause : formula.clauses) for (int lit : clause) {
+        const auto magnitude = lit < 0 ? -static_cast<std::int64_t>(lit) : static_cast<std::int64_t>(lit);
+        if (magnitude == 0 || magnitude > formula.variables)
+            throw std::invalid_argument("formula literal outside variable range");
+    }
     if (proof_.is_open()) proof_.close();
     proof_.clear(); proof_enabled_ = false;
     reset(formula.variables);
@@ -617,8 +625,6 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     } else {
         proof_enabled_ = false;
     }
-    start_time_ = std::chrono::steady_clock::now();
-
     CongruenceResult congruent;
     SimplifyResult simplified;
     const Formula* input = &formula;

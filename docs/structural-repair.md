@@ -56,11 +56,14 @@ Every instance receives the same deterministic global mechanism and budgets.
 - Four million charged edge/candidate visits, at most 32 rounds, up to eight
   AND inputs. Initial normalization, binary indexing and whole-formula rewrites
   are additional bounded linear preparation per round, included in elapsed time.
-- More than two million literals or 200,000 variables triggers a safe fallback
+- More than two million literals, one million clauses or 200,000 variables triggers a safe fallback
   to the unsimplified engine. No reduction is inferred from an incomplete SCC.
 - Signed equivalence unions preserve complement mapping. IDs are never confused
   with a fixed truth value. Completed, proved unions remain valid when a later
   budget is exhausted. Original input objects are immutable.
+- Programmatic formula inputs reject zero/out-of-range literals and invalid
+  variable counts before signed indexing. Solver timing includes validation and
+  initialization as well as preprocessing/search/proof flushing.
 - Every replaced clause is emitted as a RUP addition before the working formula
   forgets its old form. Parent clauses remain available to the proof checker.
 - Representative models are expanded to every original variable and checked

@@ -27,6 +27,20 @@ int main() {
     // Cancellation must fall back without a partial equivalence/model mapping.
     const auto interrupted=satsolv::simplify_congruence(sat,4000000,[](const std::vector<int>&){assert(false);},[](){return true;});
     assert(!interrupted.applied && interrupted.representatives.empty());
+    // Reject malformed direct API input before signed-literal indexing.
+    bool rejected=false;
+    try { (void)satsolv::simplify_congruence(satsolv::Formula{1,{{-2147483647-1}}},4000000,[](const std::vector<int>&){},[](){return false;}); }
+    catch(const std::invalid_argument&) { rejected=true; }
+    assert(rejected);
+    for (const auto& malformed : std::vector<satsolv::Formula>{{1,{{0}}},{1,{{2}}},{1,{{-2147483647-1}}},{-1,{}}}) {
+        rejected=false;
+        try { (void)satsolv::Solver().solve(malformed); }
+        catch(const std::invalid_argument&) { rejected=true; }
+        assert(rejected);
+    }
+    satsolv::Formula many_empty;many_empty.variables=1;many_empty.clauses.resize(1000001);
+    const auto fallback=satsolv::simplify_congruence(many_empty,4000000,[](const std::vector<int>&){assert(false);},[](){return false;});
+    assert(!fallback.applied && fallback.formula.clauses.empty());
     const auto empty=satsolv::Solver().solve(satsolv::parse_dimacs_text("p cnf 0 0\n"));
     assert(empty.result==satsolv::SolveResult::Sat);
     std::cout<<"PASS: congruence budgets, complementary models, interruption and empty graph\n";

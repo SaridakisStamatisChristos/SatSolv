@@ -105,9 +105,19 @@ CongruenceResult simplify_congruence(const Formula& input, std::uint64_t budget,
     const std::function<void(const std::vector<int>&)>& emit,
     const std::function<bool()>& interrupted) {
     CongruenceResult result;
+    if (input.variables < 0) throw std::invalid_argument("negative congruence variable count");
+    if (budget == 0 || input.variables > 200000 || input.clauses.size() > 1000000 || interrupted()) return result;
     std::uint64_t literals=0;
-    for (const auto& c : input.clauses) literals += c.size();
-    if (budget == 0 || input.variables > 200000 || literals > 2000000 || interrupted()) return result;
+    for (const auto& c : input.clauses) {
+        // An original empty clause needs no copied graph/formula workspace.
+        if (c.empty()) return result;
+        literals += c.size();
+        if (literals > 2000000) return result;
+        for (int lit : c) {
+            const auto magnitude = lit < 0 ? -static_cast<std::int64_t>(lit) : static_cast<std::int64_t>(lit);
+            if (magnitude == 0 || magnitude > input.variables) throw std::invalid_argument("congruence literal outside variable range");
+        }
+    }
     result.formula.variables=input.variables;
     for (auto c : input.clauses) if (normalize(c)) result.formula.clauses.push_back(std::move(c));
     SignedUnion equiv(input.variables); Work work{budget,interrupted};
