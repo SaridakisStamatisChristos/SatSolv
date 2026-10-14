@@ -1,0 +1,171 @@
+name: Structural search and exact winner confirmation
+
+on:
+  push:
+    branches: ['exp/satsolv-structural-search']
+    paths: ['src/**', 'include/**', 'tests/**', 'tools/**', 'CMakeLists.txt', '.github/workflows/structural-search.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release and test semantic equivalence
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+          python3 tools/paired_campaign_check.py
+          python3 -m py_compile tools/*.py
+      - name: Build pinned independent verifier
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Independently certify transformations and inherited policies
+        run: |
+          python3 tools/strengthen_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin --pressure
+          python3 tools/core_search_check.py build/satsolv --cases 100 --drat-trim /tmp/drat-trim-bin --pressure
+      - name: Build sanitizers and check transformations
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DSATSOLV_ENABLE_SANITIZERS=ON
+          cmake --build build-asan -j2
+          ctest --test-dir build-asan --output-on-failure
+          python3 tools/strengthen_check.py build-asan/satsolv --cases 30
+      - name: Preserve certification and pressure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: structural-search-certification
+          path: |
+            benchmarks/results/root-probe-pressure/*
+            benchmarks/results/core-search-pressure/*
+          if-no-files-found: warn
+
+  compare:
+    needs: certify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arm: ssr-target
+            flags: --experimental-short-ssr
+            confirmation: false
+            offset: 0
+          - arm: implication-target
+            flags: --experimental-implication-strengthen
+            confirmation: false
+            offset: 1
+          - arm: both-target
+            flags: --experimental-short-ssr --experimental-implication-strengthen
+            confirmation: false
+            offset: 2
+          - arm: ssr-kept-activity-target
+            flags: --experimental-short-ssr --strengthen-keep-activity
+            confirmation: false
+            offset: 0
+          - arm: root-probe-target
+            flags: --experimental-root-probe --probe-start 1000000 --probe-budget 1000000
+            confirmation: false
+            offset: 1
+          - arm: target-confirmation-1
+            flags: ''
+            confirmation: true
+            offset: 0
+          - arm: target-confirmation-2
+            flags: ''
+            confirmation: true
+            offset: 1
+          - arm: target-confirmation-3
+            flags: ''
+            confirmation: true
+            offset: 2
+          - arm: conflict-target-1
+            flags: ''
+            confirmation: true
+            deterministic: true
+            offset: 0
+          - arm: conflict-target-2
+            flags: ''
+            confirmation: true
+            deterministic: true
+            offset: 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build exact prior winner and structural control
+        run: |
+          git worktree add --detach /tmp/prior-winner 9a44a9b2e550f50c5364089dd2b67870cee109c6
+          cmake -S /tmp/prior-winner -B /tmp/prior-winner/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/prior-winner/build -j2
+          git worktree add --detach /tmp/structural-control f997df1bec87f045ffa48d16ab50729cd90e9a0e
+          cmake -S /tmp/structural-control -B /tmp/structural-control/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/structural-control/build -j2
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j2
+      - name: Build pinned proof-enabled current Kissat and verifier
+        run: |
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout 8af8e56f174b778aef3aa45af9f739b2a5f492c2
+          cd /tmp/kissat && ./configure && make -j2
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Fetch unchanged hash-pinned frozen 30
+        run: python3 tools/fetch_benchmarks.py --manifest benchmarks/competition_manifest.json --dest benchmarks/cache
+      - name: Freeze exact executable, source and invocation contracts
+        env:
+          EXTRA_FLAGS: ${{ matrix.flags }}
+          CONFIRMATION: ${{ matrix.confirmation }}
+          DETERMINISTIC: ${{ matrix.deterministic }}
+        run: |
+          mkdir -p benchmarks/results/structural-search
+          python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          winner='9a44a9b2e550f50c5364089dd2b67870cee109c6'
+          control='f997df1bec87f045ffa48d16ab50729cd90e9a0e'
+          current=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          target=['--experimental-target-phases','--search-warmup','1000000','--search-warmup-seconds','15']
+          confirm=os.environ['CONFIRMATION']=='true'
+          deterministic=os.environ['DETERMINISTIC']=='true'
+          if deterministic: target=target[:3]
+          arms=[{'name':'control','kind':'satsolv','binary':'/tmp/structural-control/build/satsolv' if confirm else '/tmp/prior-winner/build/satsolv','source_commit':control if confirm else winner,'flags':[] if confirm else target},
+                {'name':'candidate','kind':'satsolv','binary':'/tmp/prior-winner/build/satsolv' if confirm else 'build/satsolv','source_commit':winner if confirm else current,'flags':target+os.environ['EXTRA_FLAGS'].split()},
+                {'name':'kissat','kind':'kissat','binary':'/tmp/kissat/build/kissat','source_commit':'8af8e56f174b778aef3aa45af9f739b2a5f492c2','flags':[]}]
+          manifest=Path('benchmarks/competition_manifest.json')
+          digest=hashlib.sha256(manifest.read_bytes()).hexdigest()
+          assert digest=='7ef151bdfce7cd0344e27643446f2509823b43432a64292661a6de86ceb26a53'
+          purpose='conflict-only activation, two prespecified seed-1 repetitions' if deterministic else 'three seed-1 repetitions of exact winner' if confirm else 'isolated structural ablation over exact winner'
+          config={'manifest_sha256':digest,'instance_count':30,'arms':arms,'purpose':purpose}
+          Path('benchmarks/results/structural-search/config.json').write_text(json.dumps(config,indent=2)+'\n')
+          PY
+      - name: Run full certified blocked comparison and prespecified gates
+        run: |
+          python3 tools/paired_campaign.py \
+            --manifest benchmarks/competition_manifest.json \
+            --root benchmarks/cache \
+            --config benchmarks/results/structural-search/config.json \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 60 --verification-time-limit 300 --memory-gib 4 \
+            --seed 1 --order-offset ${{ matrix.offset }} --minimum-solves 10 \
+            --require-paired-gate \
+            --output benchmarks/results/structural-search/result.json
+      - name: Preserve all observations, pins and negative gates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: structural-search-${{ matrix.arm }}
+          path: benchmarks/results/structural-search/*.json
+          if-no-files-found: error

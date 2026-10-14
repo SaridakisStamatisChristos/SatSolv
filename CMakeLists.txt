@@ -10,6 +10,7 @@ add_library(satsolv_core
     src/simplifier.cpp
     src/eliminate.cpp
     src/congruence.cpp
+    src/strengthen.cpp
 )
 target_include_directories(satsolv_core PUBLIC include)
 target_compile_features(satsolv_core PUBLIC cxx_std_20)
@@ -96,6 +97,18 @@ if(BUILD_TESTING)
     endif()
   endif()
   add_test(NAME search COMMAND satsolv_search_tests)
+  add_executable(satsolv_strengthen_tests tests/test_strengthen.cpp)
+  target_link_libraries(satsolv_strengthen_tests PRIVATE satsolv_core)
+  if(MSVC)
+    target_compile_options(satsolv_strengthen_tests PRIVATE /UNDEBUG)
+  else()
+    target_compile_options(satsolv_strengthen_tests PRIVATE -UNDEBUG)
+    if(SATSOLV_ENABLE_SANITIZERS)
+      target_compile_options(satsolv_strengthen_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+      target_link_options(satsolv_strengthen_tests PRIVATE -fsanitize=address,undefined)
+    endif()
+  endif()
+  add_test(NAME strengthen COMMAND satsolv_strengthen_tests)
 endif()
 
 install(TARGETS satsolv RUNTIME DESTINATION bin)
