@@ -30,13 +30,17 @@ double time_option(const std::string& value) {
 }
 
 void usage(std::ostream& os) {
-    os << "SatSolv 0.2.0\n"
+    os << "SatSolv 0.3.0\n"
           "Usage: satsolv <instance.cnf> [options]\n"
           "Options:\n"
           "  --proof <path>       emit DRAT proof (required to certify UNSAT)\n"
           "  --seed <u64>         deterministic tie/phase seed (default: 1)\n"
           "  --reduce-interval <n> learned-clause reduction interval (default: 2000)\n"
           "  --time-limit <sec>   wall-clock limit; 0 means unlimited\n"
+          "  --no-congruence      ablate SCC/AND-gate congruence\n"
+          "  --experimental-simplify enable previous bounded simplifier\n"
+          "  --experimental-binary-minimize enable previous minimizer\n"
+          "  --experimental-clause-decay enable previous recency policy\n"
           "  --no-simplify        ablate bounded preprocessing\n"
           "  --no-binary-minimize ablate binary implication minimization\n"
           "  --no-clause-decay    ablate recency-weighted clause activity\n"
@@ -78,6 +82,10 @@ void write_stats_json(const std::filesystem::path& path,
         << "  \"deleted_learnt_clauses\": " << s.deleted_learnt_clauses << ",\n"
         << "  \"max_trail\": " << s.max_trail << ",\n"
         << "  \"proof_bytes\": " << s.proof_bytes << ",\n"
+        << "  \"congruence_equivalences\": " << s.congruence_equivalences << ",\n"
+        << "  \"congruence_and_gates\": " << s.congruence_and_gates << ",\n"
+        << "  \"congruence_work\": " << s.congruence_work << ",\n"
+        << "  \"congruence_rounds\": " << s.congruence_rounds << ",\n"
         << "  \"watch_visits\": " << s.watch_visits << ",\n"
         << "  \"blocker_hits\": " << s.blocker_hits << ",\n"
         << "  \"descriptor_scans\": " << s.descriptor_scans << ",\n"
@@ -115,7 +123,7 @@ int main(int argc, char** argv) {
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
             if (arg == "--help") { usage(std::cout); return 0; }
-            if (arg == "--version") { std::cout << "SatSolv 0.2.0\n"; return 0; }
+            if (arg == "--version") { std::cout << "SatSolv 0.3.0\n"; return 0; }
             if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval") {
                 if (++i >= argc) throw std::invalid_argument("missing value for " + arg);
                 std::string value = argv[i];
@@ -126,6 +134,10 @@ int main(int argc, char** argv) {
                 else stats_json = std::filesystem::path(value);
                 continue;
             }
+            if (arg == "--no-congruence") { config.congruence = false; continue; }
+            if (arg == "--experimental-simplify") { config.simplify = true; continue; }
+            if (arg == "--experimental-binary-minimize") { config.binary_minimize = true; continue; }
+            if (arg == "--experimental-clause-decay") { config.clause_decay = 0.999; continue; }
             if (arg == "--no-simplify") { config.simplify = false; continue; }
             if (arg == "--no-binary-minimize") { config.binary_minimize = false; continue; }
             if (arg == "--no-clause-decay") { config.clause_decay = 1.0; continue; }

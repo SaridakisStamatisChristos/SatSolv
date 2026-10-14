@@ -19,8 +19,8 @@ def main():
     ap.add_argument('--drat-trim', type=Path)
     a = ap.parse_args()
     binary = a.binary.resolve()
-    configs = [[], ['--no-simplify'], ['--no-binary-minimize'],
-               ['--no-simplify', '--no-binary-minimize', '--no-clause-decay']]
+    experimental = ['--experimental-simplify','--experimental-binary-minimize','--experimental-clause-decay']
+    configs = [[], ['--no-congruence'], experimental, ['--no-congruence', *experimental]]
     rng = random.Random(0xCAFE751)
     count = 0
     with tempfile.TemporaryDirectory() as td:

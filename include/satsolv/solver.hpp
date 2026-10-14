@@ -3,6 +3,7 @@
 #include "satsolv/parser.hpp"
 #include "satsolv/indexed_heap.hpp"
 #include "satsolv/simplifier.hpp"
+#include "satsolv/congruence.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -24,10 +25,12 @@ struct SolverConfig {
     int restart_base = 100;
     int reduce_interval = 2000;
     double var_decay = 0.95;
-    double clause_decay = 0.999;
-    bool binary_minimize = true;
-    bool simplify = true;
+    double clause_decay = 1.0;
+    bool binary_minimize = false;
+    bool simplify = false;
     bool telemetry = false;
+    bool congruence = true;
+    std::uint64_t congruence_budget = 4000000;
     std::uint64_t binary_minimize_budget = 128;
     std::uint64_t simplify_budget = 1000000;
 
@@ -43,6 +46,10 @@ struct SolverStats {
     std::uint64_t deleted_learnt_clauses = 0;
     std::size_t max_trail = 0;
     std::uint64_t proof_bytes = 0;
+    std::uint64_t congruence_equivalences = 0;
+    std::uint64_t congruence_and_gates = 0;
+    std::uint64_t congruence_work = 0;
+    std::uint64_t congruence_rounds = 0;
     std::uint64_t watch_visits = 0;
     std::uint64_t blocker_hits = 0;
     std::uint64_t descriptor_scans = 0;
