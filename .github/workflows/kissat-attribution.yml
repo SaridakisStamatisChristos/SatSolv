@@ -92,7 +92,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kissat-attribution-${{ strategy.job-index }}
+          name: kissat-attribution-${{ matrix.case_name }}
           path: evidence/*.json
           if-no-files-found: warn
 
