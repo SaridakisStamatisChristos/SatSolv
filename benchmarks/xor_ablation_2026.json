@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "purpose": "Causal ablation of Kissat 4.0.4 XOR-gate extraction before any SatSolv XOR implementation",
+  "selection_source": {
+    "repository": "satcompetition/2026",
+    "commit": "3e2dee7cf5aa643c77bf946280a3c1c520756ef9",
+    "selected_metadata_path": "downloads/benchmark-compilation-script/selected_benchmarks.csv",
+    "track_uri_path": "downloads/track_main_2026.uri"
+  },
+  "kissat": {
+    "repository": "arminbiere/kissat",
+    "commit": "8af8e56f174b778aef3aa45af9f739b2a5f492c2",
+    "control_flags": [],
+    "ablation_flags": ["--congruencexors=0"]
+  },
+  "budgets": {
+    "solver_seconds": 60,
+    "proof_seconds": 300,
+    "memory_gib": 4,
+    "seed": 1
+  },
+  "decision_rule": {
+    "material_ratio": 2.0,
+    "minimum_degradations": 3,
+    "minimum_degradation_families": 2,
+    "require_xor_shifting_degradation": true,
+    "require_degradations_exceed_reversals": true,
+    "go": "Implement a bounded proof-producing XOR-gate congruence experiment in SatSolv only if all thresholds pass.",
+    "no_go": "Do not implement XOR congruence from this hypothesis if the thresholds fail. Preserve the negative result and continue feature attribution."
+  },
+  "instances": [
+    {
+      "id": "xor-shifting-01",
+      "gbd_hash": "a08c17f9a3888841cf7bbc75a807ff7e",
+      "isohash2": "2510f15a7b2b87c5",
+      "family": "xor-shifting",
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "xor-shifting-02",
+      "gbd_hash": "d10b8bcd1bb5977c5ffe2d1859e4335f",
+      "isohash2": "f1757a53ac09ad83",
+      "family": "xor-shifting",
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "xor-shifting-03",
+      "gbd_hash": "231f3a169120d3cda9f8feea88a20d85",
+      "isohash2": "612e34b764ee2775",
+      "family": "xor-shifting",
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "xor-shifting-04",
+      "gbd_hash": "43c298c756cac6d547a0457c2da7e468",
+      "isohash2": "a1735dca1063d1c5",
+      "family": "xor-shifting",
+      "expected": "UNKNOWN"
+    },
+    {
+      "id": "lights-out-sat-01",
+      "gbd_hash": "65ee6b49612eccb7d213e4d950f23677",
+      "isohash2": "304a88ad9b742a0e",
+      "family": "lights-out",
+      "expected": "SAT"
+    },
+    {
+      "id": "lights-out-unsat-01",
+      "gbd_hash": "32e344a5ab3af245f982678d2b751c6d",
+      "isohash2": "3128705fa5c5b0c5",
+      "family": "lights-out",
+      "expected": "UNSAT"
+    },
+    {
+      "id": "lights-out-sat-02",
+      "gbd_hash": "28dcc4119e1bbb5fbd3fdd8f4140f28d",
+      "isohash2": "34471efb31944a96",
+      "family": "lights-out",
+      "expected": "SAT"
+    },
+    {
+      "id": "lights-out-unsat-02",
+      "gbd_hash": "0efcbd10294eb001b16b4d126923372f",
+      "isohash2": "41513af34f7ecb69",
+      "family": "lights-out",
+      "expected": "UNSAT"
+    },
+    {
+      "id": "syndrome-decoding-01",
+      "gbd_hash": "37fa67bd34cc613f3fc6954cdee943c1",
+      "isohash2": "d13f0339ac450d54",
+      "family": "syndrome-decoding",
+      "expected": "SAT"
+    },
+    {
+      "id": "syndrome-decoding-02",
+      "gbd_hash": "a5dc08b83ff806ac2c2c8cc23053fb07",
+      "isohash2": "7c39f83ca2b91a17",
+      "family": "syndrome-decoding",
+      "expected": "SAT"
+    },
+    {
+      "id": "syndrome-decoding-03",
+      "gbd_hash": "5fb5e437292532efe687ac6f74a9cb76",
+      "isohash2": "0a06389f430e2e4b",
+      "family": "syndrome-decoding",
+      "expected": "SAT"
+    },
+    {
+      "id": "syndrome-decoding-04",
+      "gbd_hash": "654241eda3e1283f4b139192d1db055a",
+      "isohash2": "e9734af81292ef7f",
+      "family": "syndrome-decoding",
+      "expected": "SAT"
+    }
+  ]
+}
