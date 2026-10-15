@@ -1,0 +1,156 @@
+name: External holdout v2 control-only screen
+
+on:
+  pull_request:
+    branches: ['exp/satsolv-kissat-attribution']
+    paths:
+      - benchmarks/holdout_screen_v2.json
+      - tools/holdout_control_screen.py
+      - tools/benchmark.py
+      - tools/check_model.py
+      - docs/holdout-screen-v2.md
+      - .github/workflows/holdout-screen-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-pinned-controls:
+    name: build-pinned-control-binaries
+    runs-on: ubuntu-24.04
+    env:
+      KISSAT_COMMIT: 8af8e56f174b778aef3aa45af9f739b2a5f492c2
+      DRAT_TRIM_COMMIT: 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax
+        run: python3 -m py_compile tools/holdout_control_screen.py tools/benchmark.py tools/check_model.py
+      - name: Build one pinned Kissat and verifier pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p screen-bin
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout "$KISSAT_COMMIT"
+          cd /tmp/kissat
+          ./configure
+          make -j2
+          test "$(./build/kissat --version)" = "4.0.4"
+          cp ./build/kissat "$GITHUB_WORKSPACE/screen-bin/kissat"
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout "$DRAT_TRIM_COMMIT"
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o "$GITHUB_WORKSPACE/screen-bin/drat-trim"
+          cd "$GITHUB_WORKSPACE"
+          sha256sum screen-bin/kissat screen-bin/drat-trim | tee screen-bin/SHA256SUMS
+      - name: Upload exact pinned binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: holdout-screen-v2-binaries
+          path: screen-bin/
+          if-no-files-found: error
+
+  screen:
+    name: screen-${{ matrix.case_id }}
+    needs: build-pinned-controls
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        case_id:
+          - allowable-seqence-01
+          - allowable-seqence-02
+          - allowable-seqence-03
+          - allowable-seqence-04
+          - allowable-seqence-05
+          - allowable-seqence-06
+          - boxfolding-01
+          - boxfolding-02
+          - boxfolding-03
+          - boxfolding-04
+          - boxfolding-05
+          - boxfolding-06
+          - cyclic-anti-bandwidth-01
+          - cyclic-anti-bandwidth-02
+          - cyclic-anti-bandwidth-03
+          - cyclic-anti-bandwidth-04
+          - cyclic-anti-bandwidth-05
+          - cyclic-anti-bandwidth-06
+          - multiplier-circuit-miters-01
+          - multiplier-circuit-miters-02
+          - multiplier-circuit-miters-03
+          - multiplier-circuit-miters-04
+          - multiplier-circuit-miters-05
+          - multiplier-circuit-miters-06
+          - exam-scheduling-01
+          - exam-scheduling-02
+          - exam-scheduling-03
+          - exam-scheduling-04
+          - exam-scheduling-05
+          - exam-scheduling-06
+          - datapath-equivalence-checking-01
+          - datapath-equivalence-checking-02
+          - datapath-equivalence-checking-03
+          - datapath-equivalence-checking-04
+          - datapath-equivalence-checking-05
+          - datapath-equivalence-checking-06
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact pinned control binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: holdout-screen-v2-binaries
+          path: screen-bin
+      - name: Verify pinned binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x screen-bin/kissat screen-bin/drat-trim
+          sha256sum --check screen-bin/SHA256SUMS
+          test "$(screen-bin/kissat --version)" = "4.0.4"
+      - name: Run default-control screen only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python3 tools/holdout_control_screen.py case \
+            --spec benchmarks/holdout_screen_v2.json \
+            --case-id '${{ matrix.case_id }}' \
+            --kissat screen-bin/kissat \
+            --drat-trim screen-bin/drat-trim \
+            --output 'evidence/${{ matrix.case_id }}.json'
+      - name: Upload control-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: holdout-screen-v2-${{ matrix.case_id }}
+          path: evidence/${{ matrix.case_id }}.json
+          if-no-files-found: warn
+
+  aggregate:
+    name: aggregate-control-only-selection
+    needs: screen
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all available screen evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: holdout-screen-v2-*
+          path: evidence
+          merge-multiple: true
+      - name: Apply pre-registered selection rule
+        run: |
+          python3 tools/holdout_control_screen.py aggregate \
+            --spec benchmarks/holdout_screen_v2.json \
+            --inputs evidence \
+            --output evidence/holdout-screen-v2-selection.json
+      - name: Upload proposed frozen selection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: holdout-screen-v2-selection
+          path: evidence/holdout-screen-v2-selection.json
+          if-no-files-found: warn
