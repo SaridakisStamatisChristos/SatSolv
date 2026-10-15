@@ -54,11 +54,21 @@ def load_spec(path: Path) -> dict:
             raise SystemExit(f"candidate truth is not fixed for {item.get('id')}")
         if not item.get("gbd_hash") or not item.get("isohash2"):
             raise SystemExit(f"candidate identity incomplete for {item.get('id')}")
-    # This script is intentionally incapable of reading ablation-arm definitions.
-    forbidden = ("arms", "ablation", "no_probe", "no_congruence", "no_factor")
-    encoded = json.dumps(spec).lower()
-    if any(token in encoded for token in forbidden):
-        raise SystemExit("control screen spec contains forbidden ablation material")
+
+    # Guard structure, not human-readable prose.  The screen specification may
+    # explain that ablations are forbidden, but it must not define executable
+    # feature arms or option overrides.
+    forbidden_keys = {"arms", "flags", "ablation_flags", "control_flags"}
+    def walk(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if str(key).lower() in forbidden_keys:
+                    raise SystemExit(f"control screen spec contains forbidden execution key: {key}")
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+    walk(spec)
     return spec
 
 
@@ -141,6 +151,7 @@ def screen_case(args: argparse.Namespace) -> int:
             verified, verification = benchmark.verify_sat(checker, cnf, raw["stdout"], root)
         elif result == "UNSAT":
             verified, verification = benchmark.verify_unsat(verifier, cnf, proof, proof_seconds)
+        proof_bytes = proof.stat().st_size if proof.exists() else 0
 
     if raw.get("crashed"):
         errors.append("default Kissat crashed")
@@ -169,7 +180,7 @@ def screen_case(args: argparse.Namespace) -> int:
             "result": result,
             "verified": verified,
             "verification": verification,
-            "proof_bytes": proof.stat().st_size if proof.exists() else 0,
+            "proof_bytes": proof_bytes,
             "command": command,
         },
         "eligible": eligible,
