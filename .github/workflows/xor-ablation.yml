@@ -1,0 +1,107 @@
+name: Kissat XOR congruence causal ablation
+
+on:
+  pull_request:
+    branches: ['exp/satsolv-deterministic-target']
+    paths:
+      - benchmarks/xor_ablation_2026.json
+      - tools/kissat_xor_ablation.py
+      - tools/benchmark.py
+      - tools/check_model.py
+      - docs/xor-ablation.md
+      - .github/workflows/xor-ablation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ablate:
+    name: ablate-${{ matrix.case_id }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        case_id:
+          - xor-shifting-01
+          - xor-shifting-02
+          - xor-shifting-03
+          - xor-shifting-04
+          - lights-out-sat-01
+          - lights-out-unsat-01
+          - lights-out-sat-02
+          - lights-out-unsat-02
+          - syndrome-decoding-01
+          - syndrome-decoding-02
+          - syndrome-decoding-03
+          - syndrome-decoding-04
+    env:
+      KISSAT_COMMIT: 8af8e56f174b778aef3aa45af9f739b2a5f492c2
+      DRAT_TRIM_COMMIT: 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax
+        run: python3 -m py_compile tools/kissat_xor_ablation.py tools/benchmark.py tools/check_model.py
+      - name: Build pinned drat-trim
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout "$DRAT_TRIM_COMMIT"
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Build pinned Kissat 4.0.4 once
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout "$KISSAT_COMMIT"
+          cd /tmp/kissat
+          ./configure
+          make -j2
+          ./build/kissat --version
+      - name: Run same-binary XOR ablation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python3 tools/kissat_xor_ablation.py case \
+            --spec benchmarks/xor_ablation_2026.json \
+            --case-id '${{ matrix.case_id }}' \
+            --kissat /tmp/kissat/build/kissat \
+            --drat-trim /tmp/drat-trim-bin \
+            --output 'evidence/${{ matrix.case_id }}.json'
+      - name: Upload per-case evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xor-ablation-${{ matrix.case_id }}
+          path: evidence/${{ matrix.case_id }}.json
+          if-no-files-found: warn
+
+  aggregate:
+    name: aggregate-causal-decision
+    needs: ablate
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all available case evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: xor-ablation-*
+          path: evidence
+          merge-multiple: true
+      - name: Apply pre-registered family-aware decision rule
+        run: |
+          python3 tools/kissat_xor_ablation.py aggregate \
+            --spec benchmarks/xor_ablation_2026.json \
+            --inputs evidence \
+            --output evidence/xor-ablation-summary.json
+      - name: Upload aggregate decision evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xor-ablation-summary
+          path: evidence/xor-ablation-summary.json
+          if-no-files-found: warn
