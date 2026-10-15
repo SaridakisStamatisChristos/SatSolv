@@ -1,6 +1,6 @@
 # Kissat structural mechanism attribution
 
-Status: **pre-registered diagnostic campaign; no SatSolv mechanism implementation is authorized by this document alone**.
+Status: **completed diagnostic campaign; narrow candidates identified, external validation required before implementation**.
 
 Base lineage: validated deterministic target phases, followed by the completed XOR-congruence NO-GO experiment.
 
@@ -8,7 +8,7 @@ Base lineage: validated deterministic target phases, followed by the completed X
 
 The deterministic target-phase policy reproducibly improved the frozen 30-instance result from 9 to 10 certified solves with no lost control solve, while pinned Kissat 4.0.4 remained at 15. A subsequent external SAT Competition 2026 ablation of Kissat's `congruencexors` option produced 12/12 neutral cases, so XOR-gate extraction is not justified as SatSolv's next intervention.
 
-The next question is narrower and causal: **which Kissat structural subsystem is necessary for more than one of its remaining decisive wins over SatSolv?**
+The next question was narrower and causal: **which Kissat structural subsystem is necessary for more than one of its remaining decisive wins over SatSolv?**
 
 This campaign performs necessity attribution before any new SatSolv feature is written.
 
@@ -80,10 +80,48 @@ Aggregate decisions:
 - `DECOMPOSE_SIMPLIFICATION_INTERACTION` — only the broad `no_simplify` arm passes;
 - `NO_ATTRIBUTED_STRUCTURAL_MECHANISM` — no structural subsystem passes the pre-registered threshold.
 
+## Observed result — 2026-10-15
+
+GitHub Actions run `38677127813` completed all six cases and the aggregate decision with no integrity errors. Every definitive SAT result passed independent model checking and every definitive UNSAT result passed external DRAT verification.
+
+Aggregate decision: **`VALIDATE_NARROW_CANDIDATES_ON_HOLDOUT`**.
+
+| Mechanism | Material degradations | Reversals | Threshold |
+|---|---|---:|---|
+| probing | `brent`, `SAT_dat.k10`, `posixpath`, `or_randxor` | 0 | **PASS (4/6)** |
+| gate congruence | `brent`, `posixpath` | 0 | **PASS (2/6)** |
+| bounded variable addition / factoring | `posixpath`, `or_randxor` | 0 | **PASS (2/6)** |
+| equivalent-literal substitution | `brent` | 0 | FAIL (1/6) |
+| SAT sweeping | `DivS` | 0 | FAIL (1/6) |
+| bounded variable elimination | none | 0 | **FAIL (0/6)** |
+| vivification | none | 0 | **FAIL (0/6)** |
+| broad `simplify=0` interaction arm | `brent` | 0 | FAIL (1/6) |
+
+### Important causal findings
+
+1. **Generic probing is the strongest common dependency**, with four independently certified material degradations and no reversals. This does not authorize SatSolv's previous root-probing implementation: Kissat's probing phase is an orchestration layer that invokes congruence, substitution, backbone reasoning, vivification, sweeping, transitive reduction and factoring. The earlier SatSolv root-probe branch remains rejected on its own evidence.
+2. **Gate congruence independently matters on two wins.** SatSolv already implements signed equivalence/SCC and complete AND-gate congruence, so the next question is which missing Kissat congruence submechanism matters (for example ITE or binary gate handling), not whether to add an undifferentiated congruence rewrite.
+3. **Factoring/BVA independently matters on two wins.** This is a materially different mechanism from BVE and has proof/model implications because it can introduce variables. It requires external validation and a dedicated proof-system design before any implementation attempt.
+4. **Plain BVE is neutral on all six cases.** In particular, disabling Kissat elimination does not materially hurt `posixpath`, despite the earlier observational fact that Kissat eliminated many variables there. This falsifies the simple explanation that SatSolv's missing feature is ordinary BVE.
+5. **Vivification is neutral on all six cases.** The earlier rejected SatSolv vivification branch should remain rejected absent new evidence.
+6. **No broad simplification interaction signal passed.** The useful evidence comes from the narrow arms, not from `simplify=0`.
+
+## Decision
+
+Do not implement BVE, vivification, XOR congruence, Gaussian elimination, or generic root probing from these results.
+
+Proceed to a **disjoint external validation campaign** for the three narrow candidates:
+
+- probing orchestration;
+- gate congruence;
+- factoring / bounded variable addition.
+
+Only mechanisms that reproduce a material effect on a pre-registered external holdout are eligible for a SatSolv implementation experiment. A passing holdout still does not establish superiority; implementation must then preserve proof/model correctness and beat the validated target-phase control under a separate same-binary candidate qualification.
+
 ## Hard inference boundaries
 
 - Do not infer BVE or probing from a broad `no_simplify` result without the corresponding narrow arm.
 - Do not resurrect SatSolv's previously rejected generic BVE/vivification experiments merely because a Kissat subsystem matters; implementation quality and exact mechanism still have to be established.
-- Do not implement a mechanism that fails this attribution threshold.
+- Do not equate Kissat's `probe` option with SatSolv's previous root-probing experiment.
+- Do not implement a mechanism that fails the external validation stage.
 - Do not use this frozen diagnostic campaign as evidence of general SOTA or SatSolv superiority.
-- A passing mechanism must be validated on a disjoint, pre-registered set before a SatSolv implementation campaign begins.
