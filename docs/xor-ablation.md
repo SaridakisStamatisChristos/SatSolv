@@ -1,6 +1,6 @@
 # XOR congruence mechanism attribution
 
-Status: **pre-registered experiment; no SatSolv XOR implementation yet**.
+Status: **completed; NO-GO for a SatSolv XOR-congruence implementation from this hypothesis**.
 
 Base candidate: `exp/satsolv-deterministic-target` at `49b31d39a418d469802a7143b0c3c4e070f24d37`.
 
@@ -55,6 +55,29 @@ If the rule passes, the next authorized experiment is a **bounded proof-producin
 
 If the rule fails, XOR congruence is a NO-GO from this hypothesis. Preserve the negative evidence and continue feature attribution on the remaining Kissat-only wins instead of forcing an XOR implementation.
 
+## Observed result — 2026-10-15
+
+GitHub Actions run `38676477041` completed all twelve same-binary causal comparisons and the aggregate integrity check.
+
+Observed aggregate result:
+
+- causal/integrity gate: **PASS**;
+- cases completed: **12 / 12**;
+- material degradations after disabling `congruencexors`: **0**;
+- material reversals: **0**;
+- neutral cases: **12**;
+- degradation families: **0**;
+- `xor-shifting` degradations: **0**;
+- pre-registered mechanism decision: **`NO_GO_XOR_CONGRUENCE`**.
+
+All four `xor-shifting`, all four `lights-out`, and all four `syndrome-decoding` cases were neutral under the pre-registered 2x/control-only-solve criterion. The result is stronger than merely missing the threshold: there was no material directional effect in either direction on the complete holdout.
+
+This falsifies the current hypothesis that Kissat 4.0.4's XOR-gate extraction is a material explanation for SatSolv's observed parity-oriented performance gap under this 60-second external holdout. It does **not** prove XOR reasoning is never useful, and it does not identify the cause of `or_randxor`; it says this specific mechanism is not justified as SatSolv's next intervention by the evidence gathered here.
+
+### Decision
+
+Do **not** implement XOR congruence from this hypothesis. Do **not** add Gaussian elimination. Preserve the experiment as a negative result and move to orthogonal feature attribution on Kissat's remaining decisive wins.
+
 ## Claim boundary
 
-Even a positive ablation establishes only that Kissat's XOR-gate extraction materially helps on the named external parity-oriented holdout. It does not establish that the mechanism explains every frozen-corpus loss, that an independent SatSolv implementation will reproduce Kissat's gain, or that SatSolv is SOTA.
+This negative ablation is scoped to pinned Kissat 4.0.4, the exact twelve selected SAT Competition 2026 instances, the fixed 60-second solver budget, and the pre-registered materiality rule. It does not establish SatSolv superiority or make a universal claim about XOR preprocessing.
