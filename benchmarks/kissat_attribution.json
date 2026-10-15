@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "purpose": "Attribute SatSolv's remaining frozen-corpus gap to necessary Kissat 4.0.4 mechanisms before implementing another solver feature",
+  "manifest_sha256": "7ef151bdfce7cd0344e27643446f2509823b43432a64292661a6de86ceb26a53",
+  "kissat_commit": "8af8e56f174b778aef3aa45af9f739b2a5f492c2",
+  "budgets": {
+    "solver_seconds": 60,
+    "proof_seconds": 300,
+    "memory_gib": 4,
+    "seed": 1
+  },
+  "instances": [
+    "DivS_568_11.cnf.sanitized.cnf",
+    "brent_69_0.05.cnf",
+    "SAT_dat.k10.cnf",
+    "mchess16-mixed-35percent-blocked.cnf",
+    "posixpath__joinrealpath_13.cnf",
+    "or_randxor_k3_n520_m520.cnf"
+  ],
+  "arms": [
+    {"name": "control", "flags": []},
+    {"name": "no_eliminate", "mechanism": "bounded-variable-elimination", "flags": ["--eliminate=0"]},
+    {"name": "no_probe", "mechanism": "probing", "flags": ["--probe=0"]},
+    {"name": "no_vivify", "mechanism": "vivification", "flags": ["--vivify=0"]},
+    {"name": "no_substitute", "mechanism": "equivalent-literal-substitution", "flags": ["--substitute=0"]},
+    {"name": "no_congruence", "mechanism": "gate-congruence", "flags": ["--congruence=0"]},
+    {"name": "no_sweep", "mechanism": "sat-sweeping", "flags": ["--sweep=0"]},
+    {"name": "no_factor", "mechanism": "bounded-variable-addition", "flags": ["--factor=0"]},
+    {"name": "no_simplify", "mechanism": "combined-probing-and-elimination", "flags": ["--simplify=0"]}
+  ],
+  "decision_rule": {
+    "material_ratio": 2.0,
+    "minimum_degradations_per_mechanism": 2,
+    "require_degradations_exceed_reversals": true,
+    "interpretation": "A passing mechanism is necessary on multiple frozen diagnostic wins, not yet sufficient evidence to implement it. Any SatSolv implementation still requires a separately pre-registered validation set."
+  },
+  "prohibited_inference": [
+    "Do not treat a broad no_simplify effect as attribution to BVE or probing without the corresponding narrow arm.",
+    "Do not implement a mechanism that fails the pre-registered attribution threshold.",
+    "Do not claim SatSolv superiority from this diagnostic campaign."
+  ]
+}
