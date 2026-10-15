@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "purpose": "Control-only qualification screen for a robust external structural-mechanism holdout; no ablation outcomes are observed in this stage",
+  "selection_source": {
+    "repository": "satcompetition/2026",
+    "commit": "3e2dee7cf5aa643c77bf946280a3c1c520756ef9",
+    "selected_metadata_path": "downloads/benchmark-compilation-script/selected_benchmarks.csv"
+  },
+  "kissat_commit": "8af8e56f174b778aef3aa45af9f739b2a5f492c2",
+  "budgets": {
+    "screen_solver_seconds": 30,
+    "proof_seconds": 300,
+    "memory_gib": 4,
+    "seed": 1
+  },
+  "selection_rule": {
+    "eligible": "Pinned default Kissat returns the pre-registered SAT/UNSAT truth within 30 seconds and the result independently certifies under the common model/DRAT contract.",
+    "per_family_candidates": 6,
+    "select_first_eligible_per_family": 3,
+    "required_families": 6,
+    "required_selected_cases": 18,
+    "expected_truth_balance": {"SAT": 9, "UNSAT": 9},
+    "failure": "If any family has fewer than three eligible candidates, do not substitute another family or relax the runtime/certification threshold after seeing results. Mark the screen insufficient and redesign in a new campaign."
+  },
+  "families": [
+    {"name": "allowable-seqence", "expected": "SAT"},
+    {"name": "boxfolding", "expected": "SAT"},
+    {"name": "cyclic-anti-bandwidth", "expected": "SAT"},
+    {"name": "multiplier-circuit-miters", "expected": "UNSAT"},
+    {"name": "exam-scheduling", "expected": "UNSAT"},
+    {"name": "datapath-equivalence-checking", "expected": "UNSAT"}
+  ],
+  "candidates": [
+    {"id":"allowable-seqence-01","family":"allowable-seqence","expected":"SAT","isohash2":"4238094f3266240f","gbd_hash":"776ff89b72b0f6290d69af6f95e13182"},
+    {"id":"allowable-seqence-02","family":"allowable-seqence","expected":"SAT","isohash2":"277c395d5484a2b0","gbd_hash":"d5949f26c5c5128ef2d4ac4d3b432cc2"},
+    {"id":"allowable-seqence-03","family":"allowable-seqence","expected":"SAT","isohash2":"b602efaa6a718248","gbd_hash":"4de5b7b3c8bf44b2e8c549128bc936a3"},
+    {"id":"allowable-seqence-04","family":"allowable-seqence","expected":"SAT","isohash2":"feb895b9738b7904","gbd_hash":"aa62e8cb5d38ac1b2d9eeeb8394eadeb"},
+    {"id":"allowable-seqence-05","family":"allowable-seqence","expected":"SAT","isohash2":"515060fe3332dadb","gbd_hash":"ad6bc2d583c43ff9ef00faad7e29a9c2"},
+    {"id":"allowable-seqence-06","family":"allowable-seqence","expected":"SAT","isohash2":"3cd87267273156d7","gbd_hash":"3b0eeddcabf36da8642c5774ac67680c"},
+
+    {"id":"boxfolding-01","family":"boxfolding","expected":"SAT","isohash2":"d8323d610e69e4ab","gbd_hash":"44452f4bac1e77157bbc900c5cc0756d"},
+    {"id":"boxfolding-02","family":"boxfolding","expected":"SAT","isohash2":"b7e3405417b5330a","gbd_hash":"808d66b11c602eb1d5728f3f8e90aaef"},
+    {"id":"boxfolding-03","family":"boxfolding","expected":"SAT","isohash2":"70a2de7537571394","gbd_hash":"2563ea83d8508d635cc034d80014cd72"},
+    {"id":"boxfolding-04","family":"boxfolding","expected":"SAT","isohash2":"6f240a553a99d9fb","gbd_hash":"aa0eadb6c4935468fd6954e23a550504"},
+    {"id":"boxfolding-05","family":"boxfolding","expected":"SAT","isohash2":"0938821b2790966a","gbd_hash":"2c4491c50d4df86e7c1838083cedc703"},
+    {"id":"boxfolding-06","family":"boxfolding","expected":"SAT","isohash2":"4c2d394b576cfe94","gbd_hash":"a4eec7a5fef59547129822f6b513d54c"},
+
+    {"id":"cyclic-anti-bandwidth-01","family":"cyclic-anti-bandwidth","expected":"SAT","isohash2":"ba39b2518febbcf4","gbd_hash":"3b560b9eafce79a4ac3c1062a9e72028"},
+    {"id":"cyclic-anti-bandwidth-02","family":"cyclic-anti-bandwidth","expected":"SAT","isohash2":"52db730b60139d07","gbd_hash":"9541d12f3e3d9201085c13f25145d2f7"},
+    {"id":"cyclic-anti-bandwidth-03","family":"cyclic-anti-bandwidth","expected":"SAT","isohash2":"8e358206a3690308","gbd_hash":"49644428681a87666a68fc9380dce072"},
+    {"id":"cyclic-anti-bandwidth-04","family":"cyclic-anti-bandwidth","expected":"SAT","isohash2":"f24bbb32cf12336c","gbd_hash":"da34db9ea6b524f13708357f38432bb6"},
+    {"id":"cyclic-anti-bandwidth-05","family":"cyclic-anti-bandwidth","expected":"SAT","isohash2":"645874f6d29b5174","gbd_hash":"9376a4be372c14aa68235831712ff3f9"},
+    {"id":"cyclic-anti-bandwidth-06","family":"cyclic-anti-bandwidth","expected":"SAT","isohash2":"ca723cde5792c77c","gbd_hash":"8456155de4cd22425ec479f75af089c2"},
+
+    {"id":"multiplier-circuit-miters-01","family":"multiplier-circuit-miters","expected":"UNSAT","isohash2":"391f69c99b0dfc9f","gbd_hash":"8e5da99e8323af36e983a99b4df03b92"},
+    {"id":"multiplier-circuit-miters-02","family":"multiplier-circuit-miters","expected":"UNSAT","isohash2":"e9610092906a4d71","gbd_hash":"a4f816482e853dfad9a685ac1459e66d"},
+    {"id":"multiplier-circuit-miters-03","family":"multiplier-circuit-miters","expected":"UNSAT","isohash2":"aad5d7a7ced057db","gbd_hash":"a80a252b748882980d9a80ddea8c5cff"},
+    {"id":"multiplier-circuit-miters-04","family":"multiplier-circuit-miters","expected":"UNSAT","isohash2":"25aba406a0a638c8","gbd_hash":"3e7d8073c795d263ed862db64cf9f0fb"},
+    {"id":"multiplier-circuit-miters-05","family":"multiplier-circuit-miters","expected":"UNSAT","isohash2":"2f3e4c6aeb6f8f47","gbd_hash":"7ac164a9d153f0a2d9bf54a98d429636"},
+    {"id":"multiplier-circuit-miters-06","family":"multiplier-circuit-miters","expected":"UNSAT","isohash2":"3cd0735a37669eb9","gbd_hash":"991aec61a2751602d6d7b3e838035610"},
+
+    {"id":"exam-scheduling-01","family":"exam-scheduling","expected":"UNSAT","isohash2":"352417981fc5373c","gbd_hash":"92b22042a950db2a9841f08d169d1bb5"},
+    {"id":"exam-scheduling-02","family":"exam-scheduling","expected":"UNSAT","isohash2":"c99a0f201e83b44d","gbd_hash":"5d8b47745dba3fe50f9c8712be389cd5"},
+    {"id":"exam-scheduling-03","family":"exam-scheduling","expected":"UNSAT","isohash2":"f908d0437f5ec99c","gbd_hash":"0d082b8fa36f662217bee5524cd24d3a"},
+    {"id":"exam-scheduling-04","family":"exam-scheduling","expected":"UNSAT","isohash2":"77b709acd4764ec6","gbd_hash":"aa4e80476e6a6ea1034e303e6b2e46dc"},
+    {"id":"exam-scheduling-05","family":"exam-scheduling","expected":"UNSAT","isohash2":"e7a9b97676e19951","gbd_hash":"a7e5d03892a17e51e22b688f51cf0aab"},
+    {"id":"exam-scheduling-06","family":"exam-scheduling","expected":"UNSAT","isohash2":"5ce190758ea7cbc1","gbd_hash":"266e890b706cf336378bf148bbda1aff"},
+
+    {"id":"datapath-equivalence-checking-01","family":"datapath-equivalence-checking","expected":"UNSAT","isohash2":"254d1eb903bdd974","gbd_hash":"e685a5d96e1ee9e051f191eca84b0d88"},
+    {"id":"datapath-equivalence-checking-02","family":"datapath-equivalence-checking","expected":"UNSAT","isohash2":"733824752318013c","gbd_hash":"12535b3264a9c88bac14522171b497ef"},
+    {"id":"datapath-equivalence-checking-03","family":"datapath-equivalence-checking","expected":"UNSAT","isohash2":"753ff97e5c3113c7","gbd_hash":"2a38c5d48846ee1c35c4c40938082a16"},
+    {"id":"datapath-equivalence-checking-04","family":"datapath-equivalence-checking","expected":"UNSAT","isohash2":"8066d1463c0c29a8","gbd_hash":"211b0708454f7901054f5f92f525972e"},
+    {"id":"datapath-equivalence-checking-05","family":"datapath-equivalence-checking","expected":"UNSAT","isohash2":"b030d9d23c8d41f6","gbd_hash":"5ab5ac8d66c7e375037f12a536baf721"},
+    {"id":"datapath-equivalence-checking-06","family":"datapath-equivalence-checking","expected":"UNSAT","isohash2":"b6722d547004b7f7","gbd_hash":"27495ba0093076d2e39a9b218e521ee2"}
+  ]
+}
