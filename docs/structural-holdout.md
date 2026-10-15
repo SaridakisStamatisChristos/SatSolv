@@ -1,6 +1,6 @@
 # External structural-mechanism validation
 
-Status: **pre-registered SAT Competition 2026 holdout; execution required before any SatSolv implementation**.
+Status: **completed; v1 INVALID_EVIDENCE and insufficient control coverage. No SatSolv implementation authorized.**
 
 ## Prior evidence
 
@@ -12,7 +12,7 @@ The frozen 2023 necessity-attribution campaign identified three narrow Kissat 4.
 
 Plain BVE and vivification produced 0/6 material degradations. The earlier external XOR-congruence test also produced 12/12 neutral cases. Those failed mechanisms remain rejected from their current hypotheses.
 
-The 2023 diagnostic cases were used to discover these candidates and therefore cannot validate them. This campaign uses a disjoint external holdout before any SatSolv solver code is added.
+The 2023 diagnostic cases were used to discover these candidates and therefore cannot validate them. This campaign used a disjoint external holdout before any SatSolv solver code was added.
 
 ## Holdout construction
 
@@ -38,7 +38,7 @@ Exact GBD content identifiers, isohash2 identities, family labels and truth labe
 
 ## Causal arms
 
-One pinned Kissat 4.0.4 executable (`8af8e56f174b778aef3aa45af9f739b2a5f492c2`) is compared under four arms:
+One pinned Kissat 4.0.4 executable (`8af8e56f174b778aef3aa45af9f739b2a5f492c2`) was compared under four arms:
 
 | Arm | Option | Hypothesis |
 |---|---|---|
@@ -47,7 +47,7 @@ One pinned Kissat 4.0.4 executable (`8af8e56f174b778aef3aa45af9f739b2a5f492c2`) 
 | `no_congruence` | `--congruence=0` | gate congruence |
 | `no_factor` | `--factor=0` | bounded variable addition / factoring |
 
-Every definitive SAT result requires independent model checking. Every definitive UNSAT result requires an external DRAT verdict from pinned `drat-trim`. The exact same Kissat executable, seed, cutoff and memory budget are used within a case.
+Every definitive SAT result required independent model checking. Every definitive UNSAT result required an external DRAT verdict from pinned `drat-trim`. The exact same Kissat executable, seed, cutoff and memory budget were used within a case.
 
 Limits:
 
@@ -56,7 +56,7 @@ Limits:
 - 4 GiB memory;
 - 300 seconds per proof check.
 
-Arm order is rotated deterministically by holdout index; it is never adapted after observing performance.
+Arm order was rotated deterministically by holdout index; it was never adapted after observing performance.
 
 ## Pre-registered external-validation rule
 
@@ -67,9 +67,9 @@ Material degradation means either:
 
 Material reversal is defined symmetrically.
 
-The holdout is considered sufficiently informative only if default Kissat solves at least **10 of 18** cases within the fixed budget.
+The holdout was considered sufficiently informative only if default Kissat solved at least **10 of 18** cases within the fixed budget.
 
-A mechanism passes external validation only if all of the following are true:
+A mechanism could pass external validation only if all of the following were true:
 
 - at least **4 material degradations**;
 - those degradations span at least **3 families**;
@@ -77,16 +77,54 @@ A mechanism passes external validation only if all of the following are true:
 - the global control-coverage threshold is met;
 - all evidence-integrity checks pass.
 
-Possible aggregate decisions:
+## Observed result — 2026-10-15
 
-- `IMPLEMENTATION_EXPERIMENT_ELIGIBLE` — one or more mechanisms pass;
-- `NO_EXTERNAL_VALIDATION` — coverage is sufficient but no mechanism passes;
-- `INSUFFICIENT_CONTROL_COVERAGE` — the chosen holdout is not informative enough under 60 seconds;
-- `INVALID_EVIDENCE` — certification or integrity failed.
+GitHub Actions run `38678059945` completed all 18 cases and the aggregate gate.
 
-## What a PASS authorizes
+Aggregate verdict: **`INVALID_EVIDENCE`**.
 
-A PASS does **not** merge or enable anything in SatSolv. It only makes the mechanism eligible for a dedicated implementation experiment.
+- cases completed: **18 / 18**;
+- certified default-control solves: **8 / 18**;
+- required control solves: **10 / 18**;
+- sufficient control coverage: **false**;
+- externally validated candidates: **none**;
+- integrity errors: `stable-semantics-03: per-case integrity failed`.
+
+The eight certified control solves were:
+
+- `argumentation-01`, `argumentation-02`, `argumentation-03`;
+- `ecc-equivalence-01`, `ecc-equivalence-02`, `ecc-equivalence-03`;
+- `stable-semantics-01`, `stable-semantics-02`.
+
+The three graph-coloring cases, all three count cases, and all three van-der-Waerden cases were uninformative at this cutoff because default Kissat did not produce a certified solve. Thus the intended six-family design collapsed to useful evidence from only three families.
+
+### Certification failure on `stable-semantics-03`
+
+Pinned Kissat default returned UNSAT in about 24.5 seconds, but its proof did **not** receive the required external verification within the fixed 300-second proof budget. Two ablated arms returned externally verified UNSAT results. The harness therefore marked the case integrity-failed.
+
+Any apparent `no_probe` or `no_factor` material reversals on this case are **not valid performance evidence**, because the default control was not independently certified under the common contract. They must not be counted downstream.
+
+### Mechanism result under the valid evidence subset
+
+No candidate mechanism produced a valid material degradation on the usable cases:
+
+- probing: **0 valid material degradations**;
+- gate congruence: **0 valid material degradations**;
+- factoring/BVA: **0 valid material degradations**.
+
+This does not refute the frozen-2023 diagnostic signals, because v1 lacked the pre-registered minimum control coverage and had an integrity failure. It does refute using this particular 18-case set as external validation.
+
+## Decision
+
+**No SatSolv structural implementation is authorized from v1.**
+
+Do not lower the 10/18 coverage gate, increase the materiality threshold post hoc, reinterpret unverified UNSAT as certified, or count the invalid `stable-semantics-03` reversals.
+
+The next campaign must repair **holdout construction**, not solver code. It will use a separate **control-only qualification screen** over untouched SAT Competition 2026 families. Candidate selection will depend only on default pinned Kissat producing an independently certified result with substantial runtime margin; no ablation outcome will be observed during selection. The resulting selected set must then be frozen in a new commit before `no_probe`, `no_congruence`, or `no_factor` are executed.
+
+## What a future PASS authorizes
+
+A future clean PASS still does **not** merge or enable anything in SatSolv. It only makes the mechanism eligible for a dedicated implementation experiment.
 
 The implementation phase must still:
 
@@ -96,6 +134,6 @@ The implementation phase must still:
 4. use independent correctness checking and same-binary or source-controlled causal evidence;
 5. reject the implementation if it loses control solves or fails its own pre-registered gate.
 
-Generic root probing remains separately rejected by the earlier SatSolv experiment. A `no_probe` holdout PASS therefore means the **Kissat probing pipeline contains important work**, not that SatSolv should re-enable its old root-probe implementation.
+Generic root probing remains separately rejected by the earlier SatSolv experiment. A future `no_probe` holdout PASS therefore means the **Kissat probing pipeline contains important work**, not that SatSolv should re-enable its old root-probe implementation.
 
-Factoring/BVA is especially constrained: it can introduce variables and therefore requires an explicit proof/model-extension design before implementation. No auxiliary-variable/RAT expansion is silently authorized here.
+Factoring/BVA is especially constrained: it can introduce variables and therefore requires an explicit proof/model-extension design before implementation. No auxiliary-variable/RAT expansion is silently authorized.
