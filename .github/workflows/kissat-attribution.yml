@@ -1,0 +1,124 @@
+name: Kissat structural mechanism attribution
+
+on:
+  pull_request:
+    branches: ['exp/satsolv-xor-ablation']
+    paths:
+      - benchmarks/kissat_attribution.json
+      - benchmarks/competition_manifest.json
+      - tools/kissat_feature_attribution.py
+      - tools/fetch_benchmarks.py
+      - tools/benchmark.py
+      - tools/check_model.py
+      - docs/kissat-attribution.md
+      - .github/workflows/kissat-attribution.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ablate:
+    name: attribute-${{ matrix.case_name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        case_name:
+          - DivS_568_11.cnf.sanitized.cnf
+          - brent_69_0.05.cnf
+          - SAT_dat.k10.cnf
+          - mchess16-mixed-35percent-blocked.cnf
+          - posixpath__joinrealpath_13.cnf
+          - or_randxor_k3_n520_m520.cnf
+    env:
+      KISSAT_COMMIT: 8af8e56f174b778aef3aa45af9f739b2a5f492c2
+      DRAT_TRIM_COMMIT: 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax
+        run: python3 -m py_compile tools/kissat_feature_attribution.py tools/fetch_benchmarks.py tools/benchmark.py tools/check_model.py
+      - name: Materialize one-case frozen manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          source = json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          name = os.environ['CASE_NAME']
+          rows = [x for x in source['instances'] if x['name'] == name]
+          if len(rows) != 1:
+              raise SystemExit(f'expected exactly one frozen manifest row for {name}, got {len(rows)}')
+          Path('/tmp/case-manifest.json').write_text(json.dumps({'count': 1, 'instances': rows}, indent=2) + '\n')
+          PY
+        env:
+          CASE_NAME: ${{ matrix.case_name }}
+      - name: Fetch and hash-check diagnostic input
+        run: python3 tools/fetch_benchmarks.py --manifest /tmp/case-manifest.json --dest benchmarks/cache
+      - name: Build pinned drat-trim
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout "$DRAT_TRIM_COMMIT"
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Build pinned Kissat 4.0.4 once
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout "$KISSAT_COMMIT"
+          cd /tmp/kissat
+          ./configure
+          make -j2
+          ./build/kissat --version
+      - name: Execute same-binary structural attribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          safe="$(printf '%s' '${{ matrix.case_name }}' | tr -c 'A-Za-z0-9._-' '_')"
+          python3 tools/kissat_feature_attribution.py case \
+            --spec benchmarks/kissat_attribution.json \
+            --manifest benchmarks/competition_manifest.json \
+            --case-name '${{ matrix.case_name }}' \
+            --root benchmarks/cache \
+            --kissat /tmp/kissat/build/kissat \
+            --drat-trim /tmp/drat-trim-bin \
+            --output "evidence/${safe}.json"
+      - name: Upload per-case attribution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kissat-attribution-${{ matrix.case_name }}
+          path: evidence/*.json
+          if-no-files-found: warn
+
+  aggregate:
+    name: aggregate-attribution-decision
+    needs: ablate
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all available case evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kissat-attribution-*
+          path: evidence
+          merge-multiple: true
+      - name: Apply pre-registered attribution threshold
+        run: |
+          python3 tools/kissat_feature_attribution.py aggregate \
+            --spec benchmarks/kissat_attribution.json \
+            --inputs evidence \
+            --output evidence/kissat-attribution-summary.json
+      - name: Upload aggregate attribution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kissat-attribution-summary
+          path: evidence/kissat-attribution-summary.json
+          if-no-files-found: warn
