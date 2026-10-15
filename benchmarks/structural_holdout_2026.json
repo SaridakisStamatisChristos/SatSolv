@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "purpose": "External validation of diagnostic Kissat structural attribution candidates before any SatSolv implementation",
+  "selection_source": {
+    "repository": "satcompetition/2026",
+    "commit": "3e2dee7cf5aa643c77bf946280a3c1c520756ef9",
+    "selected_metadata_path": "downloads/benchmark-compilation-script/selected_benchmarks.csv"
+  },
+  "exclusions": {
+    "prior_xor_holdout_families": ["xor-shifting", "lights-out", "syndrome-decoding"],
+    "frozen_2023_diagnostic_cases": [
+      "DivS_568_11.cnf.sanitized.cnf",
+      "brent_69_0.05.cnf",
+      "SAT_dat.k10.cnf",
+      "mchess16-mixed-35percent-blocked.cnf",
+      "posixpath__joinrealpath_13.cnf",
+      "or_randxor_k3_n520_m520.cnf"
+    ]
+  },
+  "kissat": {
+    "commit": "8af8e56f174b778aef3aa45af9f739b2a5f492c2",
+    "arms": [
+      {"name": "control", "flags": []},
+      {"name": "no_probe", "mechanism": "probing", "flags": ["--probe=0"]},
+      {"name": "no_congruence", "mechanism": "gate-congruence", "flags": ["--congruence=0"]},
+      {"name": "no_factor", "mechanism": "bounded-variable-addition", "flags": ["--factor=0"]}
+    ]
+  },
+  "budgets": {
+    "solver_seconds": 60,
+    "proof_seconds": 300,
+    "memory_gib": 4,
+    "seed": 1
+  },
+  "decision_rule": {
+    "material_ratio": 2.0,
+    "minimum_control_solves": 10,
+    "minimum_degradations": 4,
+    "minimum_degradation_families": 3,
+    "require_degradations_exceed_reversals": true,
+    "pass_meaning": "Mechanism is externally validated as materially useful to pinned Kissat on this named holdout and becomes eligible for a SatSolv implementation experiment, not default adoption.",
+    "fail_meaning": "Do not implement this mechanism from the current attribution hypothesis."
+  },
+  "instances": [
+    {"id": "graph-coloring-01", "gbd_hash": "16f8b291c8cdedb5ca7210fa0eeb34d9", "isohash2": "3af6daf2a7d55e71", "family": "graph-coloring", "expected": "UNSAT"},
+    {"id": "graph-coloring-02", "gbd_hash": "9ba8145e0d02318dea5507fc3ba03472", "isohash2": "a3c1627e6a6d8e68", "family": "graph-coloring", "expected": "UNSAT"},
+    {"id": "graph-coloring-03", "gbd_hash": "997491c0cbc3e558a3e3266e2a142215", "isohash2": "4513cf8e4859e49e", "family": "graph-coloring", "expected": "UNSAT"},
+
+    {"id": "argumentation-01", "gbd_hash": "34360a677fc854189c982294853e6891", "isohash2": "1444fc1dc6ba3ab8", "family": "argumentation", "expected": "SAT"},
+    {"id": "argumentation-02", "gbd_hash": "218f0eccbff400e06c9736bd759c1d3a", "isohash2": "1d9057de10084db9", "family": "argumentation", "expected": "SAT"},
+    {"id": "argumentation-03", "gbd_hash": "44196693d2cfdb787ba578eef4272f74", "isohash2": "2d6377d0c59bcb4d", "family": "argumentation", "expected": "SAT"},
+
+    {"id": "van-der-waerden-01", "gbd_hash": "4d6bd7b2c674fb67b271127586914b74", "isohash2": "17f12ff134abebc5", "family": "van-der-waerden", "expected": "SAT"},
+    {"id": "van-der-waerden-02", "gbd_hash": "996bd6326ca560055b6fe916708dfdaa", "isohash2": "20f6b69d02c75a2a", "family": "van-der-waerden", "expected": "UNSAT"},
+    {"id": "van-der-waerden-03", "gbd_hash": "c14f0c610d59a9d5e8cec328485b916f", "isohash2": "5cf890deb070d158", "family": "van-der-waerden", "expected": "UNSAT"},
+
+    {"id": "ecc-equivalence-01", "gbd_hash": "5babccd4bf9b270acf0568bba32313bd", "isohash2": "2149ca5979656414", "family": "ecc-equivalence-checking", "expected": "SAT"},
+    {"id": "ecc-equivalence-02", "gbd_hash": "4e0de894799790b06e8d6c3efd109ade", "isohash2": "2a2c517a7e30d08e", "family": "ecc-equivalence-checking", "expected": "SAT"},
+    {"id": "ecc-equivalence-03", "gbd_hash": "ee8c86d39745aea1c1731d4f34bcaed7", "isohash2": "4a6dbb52dae072d9", "family": "ecc-equivalence-checking", "expected": "SAT"},
+
+    {"id": "stable-semantics-01", "gbd_hash": "8db998d5fd64f85a1847115208f73873", "isohash2": "0f1d5c449b969f96", "family": "stable-semantics", "expected": "SAT"},
+    {"id": "stable-semantics-02", "gbd_hash": "97af3e49faef7cf67794928b6690b67c", "isohash2": "157ab60a6e0d543d", "family": "stable-semantics", "expected": "SAT"},
+    {"id": "stable-semantics-03", "gbd_hash": "f2c6d035d0aa58cc06927af6be7a821f", "isohash2": "32016c7b7471080e", "family": "stable-semantics", "expected": "UNSAT"},
+
+    {"id": "count-01", "gbd_hash": "0ec6bf97a96b9840ae84f1d1da4c4dcd", "isohash2": "8288c54c5c272eda", "family": "count", "expected": "UNSAT"},
+    {"id": "count-02", "gbd_hash": "fbd9968f5067604694f11f14c07c5527", "isohash2": "9e87a4802069a11a", "family": "count", "expected": "UNSAT"},
+    {"id": "count-03", "gbd_hash": "58eaf62034046ed4fc52562869569b44", "isohash2": "e496372badd8cd51", "family": "count", "expected": "UNSAT"}
+  ]
+}

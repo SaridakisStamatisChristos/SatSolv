@@ -1,0 +1,113 @@
+name: External structural mechanism holdout
+
+on:
+  pull_request:
+    branches: ['exp/satsolv-kissat-attribution']
+    paths:
+      - benchmarks/structural_holdout_2026.json
+      - tools/kissat_structural_holdout.py
+      - tools/benchmark.py
+      - tools/check_model.py
+      - docs/structural-holdout.md
+      - .github/workflows/structural-holdout.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate-${{ matrix.case_id }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        case_id:
+          - graph-coloring-01
+          - graph-coloring-02
+          - graph-coloring-03
+          - argumentation-01
+          - argumentation-02
+          - argumentation-03
+          - van-der-waerden-01
+          - van-der-waerden-02
+          - van-der-waerden-03
+          - ecc-equivalence-01
+          - ecc-equivalence-02
+          - ecc-equivalence-03
+          - stable-semantics-01
+          - stable-semantics-02
+          - stable-semantics-03
+          - count-01
+          - count-02
+          - count-03
+    env:
+      KISSAT_COMMIT: 8af8e56f174b778aef3aa45af9f739b2a5f492c2
+      DRAT_TRIM_COMMIT: 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax
+        run: python3 -m py_compile tools/kissat_structural_holdout.py tools/benchmark.py tools/check_model.py
+      - name: Build pinned drat-trim
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout "$DRAT_TRIM_COMMIT"
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Build pinned Kissat 4.0.4 once
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout "$KISSAT_COMMIT"
+          cd /tmp/kissat
+          ./configure
+          make -j2
+          test "$(./build/kissat --version)" = "4.0.4"
+      - name: Execute same-binary holdout case
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python3 tools/kissat_structural_holdout.py case \
+            --spec benchmarks/structural_holdout_2026.json \
+            --case-id '${{ matrix.case_id }}' \
+            --kissat /tmp/kissat/build/kissat \
+            --drat-trim /tmp/drat-trim-bin \
+            --output 'evidence/${{ matrix.case_id }}.json'
+      - name: Upload per-case holdout evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: structural-holdout-${{ matrix.case_id }}
+          path: evidence/${{ matrix.case_id }}.json
+          if-no-files-found: warn
+
+  aggregate:
+    name: aggregate-external-validation
+    needs: validate
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all available holdout evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: structural-holdout-*
+          path: evidence
+          merge-multiple: true
+      - name: Apply pre-registered external-validation rule
+        run: |
+          python3 tools/kissat_structural_holdout.py aggregate \
+            --spec benchmarks/structural_holdout_2026.json \
+            --inputs evidence \
+            --output evidence/structural-holdout-summary.json
+      - name: Upload aggregate holdout evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: structural-holdout-summary
+          path: evidence/structural-holdout-summary.json
+          if-no-files-found: warn
