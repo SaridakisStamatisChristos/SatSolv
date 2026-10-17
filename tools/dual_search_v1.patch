@@ -1,0 +1,236 @@
+diff --git a/src/solver_v2.cpp b/src/solver_v2.cpp
+index 5f896de..0000000 100644
+--- a/src/solver_v2.cpp
++++ b/src/solver_v2.cpp
+@@ -23,6 +23,8 @@ Solver::Solver(SolverConfig config) : config_(config) {
+         throw std::invalid_argument("rank LBD and legacy dynamic LBD are mutually exclusive");
+     if (config_.target_phases && config_.target_window == 0)
+         throw std::invalid_argument("target phase window must be positive");
++    if (config_.dual_search && config_.dual_search_interval == 0)
++        throw std::invalid_argument("dual-search interval must be positive");
+     if (!(config_.var_decay > 0.0 && config_.var_decay < 1.0)) {
+         throw std::invalid_argument("var_decay must be in (0,1)");
+     }
+@@ -99,7 +101,11 @@ void Solver::reset(int variables) {
+     target_window_ = config_.target_window;
+     reason_bump_epoch_ = 0;
+     search_active_ = config_.search_warmup == 0 && config_.search_warmup_seconds == 0.0;
++    search_mode_ = config_.dual_search ? SearchMode::Focused : SearchMode::Stable;
++    next_mode_switch_ = config_.dual_search ? config_.dual_search_interval : std::numeric_limits<std::uint64_t>::max();
+     order_heap_.reset(activity_, heap_rank_);
++    if (config_.dual_search) vmtf_queue_.reset(activity_, heap_rank_);
++    else vmtf_queue_.clear();
+     var_inc_ = 1.0;
+     clause_inc_ = 1.0;
+@@ -517,26 +523,49 @@ void Solver::cancel_until(int level) {
+         assigns_[static_cast<std::size_t>(v)] = -1;
+         levels_[static_cast<std::size_t>(v)] = 0;
+         reasons_[static_cast<std::size_t>(v)] = -1;
+-        if (decision_enabled_[static_cast<std::size_t>(v)] != 0) order_heap_.update(v);
++        if (decision_enabled_[static_cast<std::size_t>(v)] != 0) {
++            order_heap_.update(v);
++            if (config_.dual_search) vmtf_queue_.note_unassigned(v);
++        }
+     }
+     trail_.resize(target);
+     if (config_.target_phases) target_shared_prefix_ = std::min(target_shared_prefix_, target);
+     trail_lim_.resize(static_cast<std::size_t>(level));
+     qhead_ = std::min(qhead_, trail_.size());
+ }
+ 
+ int Solver::pick_branch_lit() {
+-    while (!order_heap_.empty()) {
+-        const int v = order_heap_.pop();
+-        if (assigns_[static_cast<std::size_t>(v)] != -1 || decision_enabled_[static_cast<std::size_t>(v)] == 0) continue;
+-        if (config_.target_phases && search_active_ && target_phase_[static_cast<std::size_t>(v)] >= 0) {
+-            ++stats_.target_decisions;
+-            return target_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
++    int v = 0;
++    if (config_.dual_search && search_mode_ == SearchMode::Focused) {
++        std::uint64_t inspected = 0;
++        v = vmtf_queue_.pick(assigns_, decision_enabled_, inspected);
++        stats_.vmtf_search_steps += inspected;
++    } else {
++        while (!order_heap_.empty()) {
++            const int candidate = order_heap_.pop();
++            if (assigns_[static_cast<std::size_t>(candidate)] != -1 ||
++                decision_enabled_[static_cast<std::size_t>(candidate)] == 0) continue;
++            v = candidate;
++            break;
+         }
+-        return saved_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
+     }
+-    return 0;
++    if (v == 0) return 0;
++    if (config_.dual_search) {
++        if (search_mode_ == SearchMode::Focused) ++stats_.focused_decisions;
++        else ++stats_.stable_decisions;
++    }
++    if (config_.target_phases && search_active_ && target_phase_[static_cast<std::size_t>(v)] >= 0) {
++        ++stats_.target_decisions;
++        return target_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
++    }
++    return saved_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
+ }
+@@ -591,7 +620,11 @@ void Solver::bump_variable(int variable) {
+     activity_[static_cast<std::size_t>(variable)] += var_inc_;
+     if (activity_[static_cast<std::size_t>(variable)] > 1e100) rescale_activities();
+-    if (decision_enabled_[static_cast<std::size_t>(variable)] != 0) order_heap_.update(variable);
++    if (decision_enabled_[static_cast<std::size_t>(variable)] != 0) {
++        order_heap_.update(variable);
++        if (config_.dual_search) {
++            vmtf_queue_.bump(variable); ++stats_.vmtf_bumps;
++        }
++    }
+     if (config_.telemetry) {
+         ++stats_.heap_updates;
+         stats_.peak_heap_entries = std::max(stats_.peak_heap_entries, static_cast<std::uint64_t>(order_heap_.size()));
+@@ -577,6 +610,18 @@ void Solver::maybe_activate_search() {
+     if (conflict_budget || time_budget) activate_search();
+ }
+ 
++void Solver::maybe_switch_search_mode() {
++    if (!config_.dual_search || stats_.conflicts < next_mode_switch_) return;
++    search_mode_ = search_mode_ == SearchMode::Focused ? SearchMode::Stable : SearchMode::Focused;
++    ++stats_.search_mode_switches;
++    const auto limit = std::numeric_limits<std::uint64_t>::max();
++    next_mode_switch_ = config_.dual_search_interval > limit - stats_.conflicts
++        ? limit
++        : stats_.conflicts + config_.dual_search_interval;
++}
++
+ int Solver::compute_antecedent_lbd(const Clause& clause, int implied_variable) {
+@@ -1018,6 +1063,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::filesystem::path>& proof_path) {
+     for (int v = 1; v <= nvars_; ++v) {
+         if (decision_enabled_[static_cast<std::size_t>(v)] != 0) order_heap_.update(v);
+     }
++    if (config_.dual_search) vmtf_queue_.reset(activity_, heap_rank_);
+ 
+     SolveOutput output;
+@@ -1056,6 +1102,10 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::filesystem::path>& proof_path) {
+                 if (conflict >= 0) {
+                     ++stats_.conflicts;
+                     ++conflicts_since_restart_;
++                    if (config_.dual_search) {
++                        if (search_mode_ == SearchMode::Focused) ++stats_.focused_conflicts;
++                        else ++stats_.stable_conflicts;
++                    }
+                     if (decision_level() == 0) {
+                         log_empty();
+                         output.result = SolveResult::Unsat;
+@@ -1115,6 +1165,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::filesystem::path>& proof_path) {
+                             if (conflict >= 0) { log_empty(); output.result = SolveResult::Unsat; break; }
+                         }
+                     }
++                    maybe_switch_search_mode();
+                     continue;
+                 }
+ 
+diff --git a/src/main.cpp b/src/main.cpp
+index 710873f..0000000 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -44,6 +44,8 @@ void usage(std::ostream& os) {
+           "  --experimental-reason-bump bounded reason-side variable activity\n"
+           "  --experimental-recent-use one-round conflict-use clause protection\n"
++          "  --experimental-dual-search alternate focused VMTF / stable EVSIDS\n"
++          "  --dual-search-interval <n> conflicts per search mode (default: 1000)\n"
+           "  --experimental-short-ssr bounded structure-preserving resolution\n"
+@@ -108,6 +110,13 @@ void write_stats_json(const std::filesystem::path& path,
+         << "  \"decisions\": " << s.decisions << ",\n"
+         << "  \"propagations\": " << s.propagations << ",\n         << "  \"restarts\": " << s.restarts << ",\n+        << "  \"search_mode_switches\": " << s.search_mode_switches << ",\n"
++        << "  \"focused_conflicts\": " << s.focused_conflicts << ",\n"
++        << "  \"stable_conflicts\": " << s.stable_conflicts << ",\n"
++        << "  \"focused_decisions\": " << s.focused_decisions << ",\n"
++        << "  \"stable_decisions\": " << s.stable_decisions << ",\n"
++        << "  \"vmtf_bumps\": " << s.vmtf_bumps << ",\n"
++        << "  \"vmtf_search_steps\": " << s.vmtf_search_steps << ",\n"
+         << "  \"learnt_clauses\": " << s.learnt_clauses << ",\n@@ -184,7 +193,7 @@ int main(int argc, char** argv) {
+-            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget" || arg == "--search-warmup" || arg == "--search-warmup-seconds" || arg == "--strengthen-budget" || arg == "--probe-start" || arg == "--probe-budget") {
++            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget" || arg == "--search-warmup" || arg == "--search-warmup-seconds" || arg == "--dual-search-interval" || arg == "--strengthen-budget" || arg == "--probe-start" || arg == "--probe-budget") {
+@@ -199,6 +208,7 @@ int main(int argc, char** argv) {
+                 else if (arg == "--search-warmup") config.search_warmup = integer_option<std::uint64_t>(value, arg);
+                 else if (arg == "--search-warmup-seconds") config.search_warmup_seconds = time_option(value);
++                else if (arg == "--dual-search-interval") config.dual_search_interval = integer_option<std::uint64_t>(value, arg);
+                 else if (arg == "--time-limit") config.time_limit_seconds = time_option(value);
+@@ -217,6 +227,7 @@ int main(int argc, char** argv) {
+             if (arg == "--experimental-reason-bump") { config.reason_bump = true; continue; }
+             if (arg == "--experimental-recent-use") { config.recent_use = true; continue; }
++            if (arg == "--experimental-dual-search") { config.dual_search = true; continue; }
+             if (arg == "--experimental-short-ssr") { config.short_ssr = true; continue; }
+@@ -270,6 +281,9 @@ int main(int argc, char** argv) {
+                       << "c decisions " << s.decisions << "\n"
+                       << "c propagations " << s.propagations << "\n"
+                       << "c restarts " << s.restarts << "\n"
++                      << "c search_mode_switches " << s.search_mode_switches << "\n"
++                      << "c focused_conflicts " << s.focused_conflicts << "\n"
++                      << "c stable_conflicts " << s.stable_conflicts << "\n"
+                       << "c learnt_clauses " << s.learnt_clauses << "\n"
+diff --git a/tests/test_search.cpp b/tests/test_search.cpp
+index e169ed1..0000000 100644
+--- a/tests/test_search.cpp
++++ b/tests/test_search.cpp
+@@ -100,6 +100,48 @@ struct SolverSearchTestAccess {
+         solver.maybe_activate_search(); assert(solver.search_active_ && solver.stats_.search_activations == 1);
+     }
+ 
++    static void dual_search_modes() {
++        SolverConfig config; config.dual_search = true; config.dual_search_interval = 2;
++        Solver solver(config); solver.reset(4);
++        assert(solver.search_mode_ == Solver::SearchMode::Focused);
++        assert(solver.next_mode_switch_ == 2);
++
++        solver.activity_[4] = 100.0;
++        solver.order_heap_.update(4);
++        solver.vmtf_queue_.reset(solver.activity_, solver.heap_rank_);
++        assert(solver.pick_branch_lit() == 4);
++        solver.bump_variable(3);
++        assert(solver.vmtf_queue_.tail() == 3);
++        assert(solver.pick_branch_lit() == 3);
++
++        solver.stats_.conflicts = 1;
++        solver.maybe_switch_search_mode();
++        assert(solver.search_mode_ == Solver::SearchMode::Focused);
++        solver.stats_.conflicts = 2;
++        solver.maybe_switch_search_mode();
++        assert(solver.search_mode_ == Solver::SearchMode::Stable);
++        assert(solver.stats_.search_mode_switches == 1 && solver.next_mode_switch_ == 4);
++
++        solver.activity_[2] = 1000.0;
++        solver.order_heap_.update(2);
++        assert(solver.pick_branch_lit() == 2);
++        solver.stats_.conflicts = 4;
++        solver.maybe_switch_search_mode();
++        assert(solver.search_mode_ == Solver::SearchMode::Focused);
++        assert(solver.stats_.search_mode_switches == 2);
++
++        SolverConfig end_to_end; end_to_end.dual_search = true;
++        end_to_end.dual_search_interval = 1; end_to_end.congruence = false;
++        Solver search_solver(end_to_end);
++        const auto unsat = parse_dimacs_text("p cnf 2 4\n1 2 0\n1 -2 0\n-1 2 0\n-1 -2 0\n");
++        const auto result = search_solver.solve(unsat);
++        assert(result.result == SolveResult::Unsat);
++        assert(result.stats.focused_conflicts + result.stats.stable_conflicts == result.stats.conflicts);
++        assert(result.stats.focused_decisions + result.stats.stable_decisions == result.stats.decisions);
++        assert(result.stats.vmtf_search_steps > 0);
++    }
++
+     static void root_probing() {
+@@ -145,6 +187,7 @@ int main() {
+     satsolv::SolverSearchTestAccess::targets_and_reason_budget();
+     satsolv::SolverSearchTestAccess::delayed_activation();
++    satsolv::SolverSearchTestAccess::dual_search_modes();
+     satsolv::SolverSearchTestAccess::root_probing();
+@@ -155,6 +198,9 @@ int main() {
+     try { satsolv::Solver solver(config); } catch (const std::invalid_argument&) { rejected = true; }
+     assert(rejected);
++    config = {}; config.dual_search = true; config.dual_search_interval = 0; rejected = false;
++    try { satsolv::Solver solver(config); } catch (const std::invalid_argument&) { rejected = true; }
++    assert(rejected);
+     config = {}; config.rank_lbd = config.target_phases = config.reason_bump = config.recent_use = true;
+@@ -177,5 +223,5 @@ int main() {
+         assert(satisfied);
+     }
+-    std::cout << "PASS: birth/reason score conventions, fixed tiers, recent-use expiration, reason locks, target backtracking/reset, bounded bumps and epoch wrap\n";
++    std::cout << "PASS: search policy invariants including focused VMTF / stable EVSIDS dual search\n";
+ }
