@@ -23,6 +23,8 @@ Solver::Solver(SolverConfig config) : config_(config) {
         throw std::invalid_argument("rank LBD and legacy dynamic LBD are mutually exclusive");
     if (config_.target_phases && config_.target_window == 0)
         throw std::invalid_argument("target phase window must be positive");
+    if (config_.dual_search && config_.dual_search_interval == 0)
+        throw std::invalid_argument("dual-search interval must be positive");
     if (!(config_.var_decay > 0.0 && config_.var_decay < 1.0)) {
         throw std::invalid_argument("var_decay must be in (0,1)");
     }
@@ -100,7 +102,11 @@ void Solver::reset(int variables) {
     next_target_reset_ = target_window_ = config_.target_window;
     reason_bump_epoch_ = 0;
     search_active_ = config_.search_warmup == 0 && config_.search_warmup_seconds == 0.0;
+    search_mode_ = config_.dual_search ? SearchMode::Focused : SearchMode::Stable;
+    next_mode_switch_ = config_.dual_search ? config_.dual_search_interval : std::numeric_limits<std::uint64_t>::max();
     order_heap_.reset(activity_, heap_rank_);
+    if (config_.dual_search) vmtf_queue_.reset(activity_, heap_rank_);
+    else vmtf_queue_.clear();
     var_inc_ = 1.0;
     clause_inc_ = 1.0;
 
@@ -498,7 +504,10 @@ void Solver::cancel_until(int level) {
         assigns_[static_cast<std::size_t>(v)] = -1;
         levels_[static_cast<std::size_t>(v)] = 0;
         reasons_[static_cast<std::size_t>(v)] = -1;
-        if (decision_enabled_[static_cast<std::size_t>(v)] != 0) order_heap_.update(v);
+        if (decision_enabled_[static_cast<std::size_t>(v)] != 0) {
+            order_heap_.update(v);
+            if (config_.dual_search) vmtf_queue_.note_unassigned(v);
+        }
     }
     trail_.resize(target);
     if (config_.target_phases) target_shared_prefix_ = std::min(target_shared_prefix_, target);
@@ -507,16 +516,30 @@ void Solver::cancel_until(int level) {
 }
 
 int Solver::pick_branch_lit() {
-    while (!order_heap_.empty()) {
-        const int v = order_heap_.pop();
-        if (assigns_[static_cast<std::size_t>(v)] != -1 || decision_enabled_[static_cast<std::size_t>(v)] == 0) continue;
-        if (config_.target_phases && search_active_ && target_phase_[static_cast<std::size_t>(v)] >= 0) {
-            ++stats_.target_decisions;
-            return target_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
+    int v = 0;
+    if (config_.dual_search && search_mode_ == SearchMode::Focused) {
+        std::uint64_t inspected = 0;
+        v = vmtf_queue_.pick(assigns_, decision_enabled_, inspected);
+        stats_.vmtf_search_steps += inspected;
+    } else {
+        while (!order_heap_.empty()) {
+            const int candidate = order_heap_.pop();
+            if (assigns_[static_cast<std::size_t>(candidate)] != -1 ||
+                decision_enabled_[static_cast<std::size_t>(candidate)] == 0) continue;
+            v = candidate;
+            break;
         }
-        return saved_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
     }
-    return 0;
+    if (v == 0) return 0;
+    if (config_.dual_search) {
+        if (search_mode_ == SearchMode::Focused) ++stats_.focused_decisions;
+        else ++stats_.stable_decisions;
+    }
+    if (config_.target_phases && search_active_ && target_phase_[static_cast<std::size_t>(v)] >= 0) {
+        ++stats_.target_decisions;
+        return target_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
+    }
+    return saved_phase_[static_cast<std::size_t>(v)] != 0 ? v : -v;
 }
 
 void Solver::capture_target() {
@@ -553,6 +576,16 @@ void Solver::maybe_activate_search() {
     const bool time_budget = config_.search_warmup_seconds > 0.0 &&
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time_).count() >= config_.search_warmup_seconds;
     if (conflict_budget || time_budget) activate_search();
+}
+
+void Solver::maybe_switch_search_mode() {
+    if (!config_.dual_search || stats_.conflicts < next_mode_switch_) return;
+    search_mode_ = search_mode_ == SearchMode::Focused ? SearchMode::Stable : SearchMode::Focused;
+    ++stats_.search_mode_switches;
+    const auto limit = std::numeric_limits<std::uint64_t>::max();
+    next_mode_switch_ = config_.dual_search_interval > limit - stats_.conflicts
+        ? limit
+        : stats_.conflicts + config_.dual_search_interval;
 }
 
 int Solver::compute_antecedent_lbd(const Clause& clause, int implied_variable) {
@@ -607,7 +640,12 @@ void Solver::rescale_activities() {
 void Solver::bump_variable(int variable) {
     activity_[static_cast<std::size_t>(variable)] += var_inc_;
     if (activity_[static_cast<std::size_t>(variable)] > 1e100) rescale_activities();
-    if (decision_enabled_[static_cast<std::size_t>(variable)] != 0) order_heap_.update(variable);
+    if (decision_enabled_[static_cast<std::size_t>(variable)] != 0) {
+        order_heap_.update(variable);
+        if (config_.dual_search) {
+            vmtf_queue_.bump(variable); ++stats_.vmtf_bumps;
+        }
+    }
     if (config_.telemetry) {
         ++stats_.heap_updates;
         stats_.peak_heap_entries = std::max(stats_.peak_heap_entries, static_cast<std::uint64_t>(order_heap_.size()));
@@ -1044,6 +1082,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     for (int v = 1; v <= nvars_; ++v) {
         if (decision_enabled_[static_cast<std::size_t>(v)] != 0) order_heap_.update(v);
     }
+    if (config_.dual_search) vmtf_queue_.reset(activity_, heap_rank_);
 
     SolveOutput output;
     if (root_unsat_) {
@@ -1080,6 +1119,10 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
                 if (conflict >= 0) {
                     ++stats_.conflicts;
                     ++conflicts_since_restart_;
+                    if (config_.dual_search) {
+                        if (search_mode_ == SearchMode::Focused) ++stats_.focused_conflicts;
+                        else ++stats_.stable_conflicts;
+                    }
                     if (decision_level() == 0) {
                         log_empty();
                         output.result = SolveResult::Unsat;
@@ -1134,6 +1177,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
                             if (conflict >= 0) { log_empty(); output.result = SolveResult::Unsat; break; }
                         }
                     }
+                    maybe_switch_search_mode();
                     continue;
                 }
 

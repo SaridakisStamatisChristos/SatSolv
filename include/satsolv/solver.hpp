@@ -2,6 +2,7 @@
 
 #include "satsolv/parser.hpp"
 #include "satsolv/indexed_heap.hpp"
+#include "satsolv/vmtf_queue.hpp"
 #include "satsolv/simplifier.hpp"
 #include "satsolv/congruence.hpp"
 #include "satsolv/strengthen.hpp"
@@ -40,6 +41,7 @@ struct SolverConfig {
     bool target_phases = false;
     bool reason_bump = false;
     bool recent_use = false;
+    bool dual_search = false;
     bool short_ssr = false;
     bool implication_strengthen = false;
     bool strengthen_keep_activity = false;
@@ -51,6 +53,7 @@ struct SolverConfig {
     std::uint64_t reason_bump_budget = 128;
     std::uint64_t search_warmup = 0;
     double search_warmup_seconds = 0.0;
+    std::uint64_t dual_search_interval = 1000;
     std::uint64_t eliminate_budget = 8000000;
     std::uint64_t vivify_budget = 16000000;
     std::uint64_t congruence_budget = 4000000;
@@ -65,6 +68,13 @@ struct SolverStats {
     std::uint64_t decisions = 0;
     std::uint64_t propagations = 0;
     std::uint64_t restarts = 0;
+    std::uint64_t search_mode_switches = 0;
+    std::uint64_t focused_conflicts = 0;
+    std::uint64_t stable_conflicts = 0;
+    std::uint64_t focused_decisions = 0;
+    std::uint64_t stable_decisions = 0;
+    std::uint64_t vmtf_bumps = 0;
+    std::uint64_t vmtf_search_steps = 0;
     std::uint64_t learnt_clauses = 0;
     std::uint64_t deleted_learnt_clauses = 0;
     std::size_t max_trail = 0;
@@ -135,6 +145,8 @@ public:
 
 private:
     friend struct SolverSearchTestAccess;
+    enum class SearchMode { Focused, Stable };
+
     struct Clause {
         std::size_t offset = 0;
         double activity = 0.0;
@@ -186,7 +198,10 @@ private:
     std::vector<std::uint64_t> reason_bump_marks_;
     std::uint64_t reason_bump_epoch_ = 0;
     bool search_active_ = true;
+    SearchMode search_mode_ = SearchMode::Stable;
+    std::uint64_t next_mode_switch_ = 0;
     IndexedHeap order_heap_;
+    VmtfQueue vmtf_queue_;
     double var_inc_ = 1.0;
     double clause_inc_ = 1.0;
 
@@ -241,6 +256,7 @@ private:
     void bump_reason_variables(const std::vector<int>& learnt);
     void activate_search();
     void maybe_activate_search();
+    void maybe_switch_search_mode();
     void minimize_clause(std::vector<int>& clause);
     void reduce_database();
     bool clause_locked(int cid) const noexcept;
