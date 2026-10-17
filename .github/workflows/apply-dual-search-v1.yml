@@ -19,6 +19,20 @@ jobs:
           fetch-depth: 0
           ref: exp/satsolv-dual-search-v1
 
+      - name: Repair exact human-stats transform needle
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tools/apply_dual_search_v1.py')
+          s = p.read_text()
+          start_marker = '''replace_once(\n    "src/main.cpp",\n    \'\'\'                      << "c propagations "'''
+          start = s.index(start_marker)
+          end = s.index('\n\n# tests/test_search.cpp', start)
+          replacement = '''replace_once(\n    "src/main.cpp",\n    \'\'\'                      << "c restarts " << s.restarts << "\\\\n"\\n\'\'\',\n    \'\'\'                      << "c restarts " << s.restarts << "\\\\n"\\n                      << "c search_mode_switches " << s.search_mode_switches << "\\\\n"\\n                      << "c focused_conflicts " << s.focused_conflicts << "\\\\n"\\n                      << "c stable_conflicts " << s.stable_conflicts << "\\\\n"\\n\'\'\')'''
+          p.write_text(s[:start] + replacement + s[end:])
+          PY
+
       - name: Apply exact source transformation
         run: python3 tools/apply_dual_search_v1.py
 
