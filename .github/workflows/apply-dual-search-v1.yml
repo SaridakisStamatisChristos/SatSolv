@@ -1,18 +1,16 @@
 name: Apply dual-search v1 implementation
 
 on:
-  push:
+  pull_request:
     branches:
-      - exp/satsolv-dual-search-v1
-    paths:
-      - tools/apply_dual_search_v1.py
-      - .github/workflows/apply-dual-search-v1.yml
+      - exp/satsolv-holdout-screen-v2
 
 permissions:
   contents: write
 
 jobs:
   apply-test-commit:
+    if: github.head_ref == 'exp/satsolv-dual-search-v1'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -29,7 +27,6 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          git diff --exit-code -- include/satsolv/vmtf_queue.hpp >/dev/null || true
           git status --short
           test -n "$(git status --short src/solver_v2.cpp src/main.cpp tests/test_search.cpp)"
 
