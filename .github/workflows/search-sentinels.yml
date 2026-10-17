@@ -1,0 +1,91 @@
+name: VMTF / EVSIDS sentinel ablation
+
+on:
+  pull_request:
+    paths:
+      - tools/search_sentinel_ab.py
+      - tests/test_search_sentinel_ab.py
+      - .github/workflows/search-sentinels.yml
+      - docs/search-sentinels.md
+      - tools/paired_campaign.py
+      - benchmarks/competition_manifest.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  search-sentinels:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      MANIFEST_SHA256: 7ef151bdfce7cd0344e27643446f2509823b43432a64292661a6de86ceb26a53
+      DRAT_TRIM_COMMIT: 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify unchanged full benchmark source
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' "$MANIFEST_SHA256" benchmarks/competition_manifest.json | sha256sum --check --strict
+      - name: Python integrity and configuration tests
+        run: |
+          python3 -m py_compile tools/search_sentinel_ab.py tools/paired_campaign.py
+          python3 -m unittest discover -s tests -p test_search_sentinel_ab.py -v
+      - name: Strict release native build and tests
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSATSOLV_WARNINGS_AS_ERRORS=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+      - name: Build independent proof verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout "$DRAT_TRIM_COMMIT"
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Fetch SHA-256-verified frozen inputs
+        run: python3 tools/fetch_benchmarks.py --manifest benchmarks/competition_manifest.json --dest benchmarks/cache
+      - name: Prepare pinned four-sentinel, five-arm experiment
+        run: |
+          python3 tools/search_sentinel_ab.py prepare \
+            --manifest benchmarks/competition_manifest.json \
+            --binary build/satsolv \
+            --source-commit "$GITHUB_SHA" \
+            --output benchmarks/results/search-sentinels-v1
+      - name: Execute proof-certified same-binary comparison
+        run: |
+          python3 tools/paired_campaign.py \
+            --manifest benchmarks/results/search-sentinels-v1/sentinel_manifest.json \
+            --root benchmarks/cache \
+            --config benchmarks/results/search-sentinels-v1/config.json \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit 60 --verification-time-limit 300 --memory-gib 4 \
+            --seed 1 --minimum-solves 0 --order-offset 0 \
+            --output benchmarks/results/search-sentinels-v1/result.json
+      - name: Audit source/flag/telemetry identity
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f benchmarks/results/search-sentinels-v1/result.json; then
+            python3 tools/search_sentinel_ab.py audit \
+              --result benchmarks/results/search-sentinels-v1/result.json \
+              --output benchmarks/results/search-sentinels-v1/audit.json
+          else
+            echo 'no completed benchmark evidence; cannot audit' >&2
+            exit 1
+          fi
+      - name: Upload evidence regardless of result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-mode-sentinels-v1-evidence
+          path: |
+            benchmarks/results/search-sentinels-v1/config.json
+            benchmarks/results/search-sentinels-v1/sentinel_manifest.json
+            benchmarks/results/search-sentinels-v1/result.json
+            benchmarks/results/search-sentinels-v1/audit.json
+          if-no-files-found: warn
+
+# Neither a green diagnostic workflow nor one solved sentinel approves adoption.
