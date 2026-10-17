@@ -87,7 +87,7 @@ jobs:
 
       - name: Remove one-shot transformation scaffolding
         run: |
-          git rm tools/apply_dual_search_v1.py tools/dual_search_v1.patch .github/workflows/apply-dual-search-v1.yml
+          git rm -f tools/apply_dual_search_v1.py tools/dual_search_v1.patch .github/workflows/apply-dual-search-v1.yml
 
       - name: Commit verified implementation
         shell: bash
