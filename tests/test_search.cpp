@@ -107,6 +107,47 @@ struct SolverSearchTestAccess {
         solver.maybe_activate_search(); assert(solver.search_active_ && solver.stats_.search_activations == 1);
     }
 
+    static void dual_search_modes() {
+        SolverConfig config; config.dual_search = true; config.dual_search_interval = 2;
+        Solver solver(config); solver.reset(4);
+        assert(solver.search_mode_ == Solver::SearchMode::Focused);
+        assert(solver.next_mode_switch_ == 2);
+
+        solver.activity_[4] = 100.0;
+        solver.order_heap_.update(4);
+        solver.vmtf_queue_.reset(solver.activity_, solver.heap_rank_);
+        assert(solver.pick_branch_lit() == 4);
+        solver.bump_variable(3);
+        assert(solver.vmtf_queue_.tail() == 3);
+        assert(solver.pick_branch_lit() == 3);
+
+        solver.stats_.conflicts = 1;
+        solver.maybe_switch_search_mode();
+        assert(solver.search_mode_ == Solver::SearchMode::Focused);
+        solver.stats_.conflicts = 2;
+        solver.maybe_switch_search_mode();
+        assert(solver.search_mode_ == Solver::SearchMode::Stable);
+        assert(solver.stats_.search_mode_switches == 1 && solver.next_mode_switch_ == 4);
+
+        solver.activity_[2] = 1000.0;
+        solver.order_heap_.update(2);
+        assert(solver.pick_branch_lit() == 2);
+        solver.stats_.conflicts = 4;
+        solver.maybe_switch_search_mode();
+        assert(solver.search_mode_ == Solver::SearchMode::Focused);
+        assert(solver.stats_.search_mode_switches == 2);
+
+        SolverConfig end_to_end; end_to_end.dual_search = true;
+        end_to_end.dual_search_interval = 1; end_to_end.congruence = false;
+        Solver search_solver(end_to_end);
+        const auto unsat = parse_dimacs_text("p cnf 2 4\n1 2 0\n1 -2 0\n-1 2 0\n-1 -2 0\n");
+        const auto result = search_solver.solve(unsat);
+        assert(result.result == SolveResult::Unsat);
+        assert(result.stats.focused_conflicts + result.stats.stable_conflicts == result.stats.conflicts);
+        assert(result.stats.focused_decisions + result.stats.stable_decisions == result.stats.decisions);
+        assert(result.stats.vmtf_search_steps > 0);
+    }
+
     static void root_probing() {
         SolverConfig config; config.root_probe = true; config.probe_start = 0;
         Solver solver(config); solver.reset(4);
@@ -139,12 +180,16 @@ int main() {
     satsolv::SolverSearchTestAccess::recent_use_and_locks();
     satsolv::SolverSearchTestAccess::targets_and_reason_budget();
     satsolv::SolverSearchTestAccess::delayed_activation();
+    satsolv::SolverSearchTestAccess::dual_search_modes();
     satsolv::SolverSearchTestAccess::root_probing();
     satsolv::SolverConfig config; config.rank_lbd = config.dynamic_lbd = true;
     bool rejected = false;
     try { satsolv::Solver solver(config); } catch (const std::invalid_argument&) { rejected = true; }
     assert(rejected);
     config = {}; config.target_phases = true; config.target_window = 0; rejected = false;
+    try { satsolv::Solver solver(config); } catch (const std::invalid_argument&) { rejected = true; }
+    assert(rejected);
+    config = {}; config.dual_search = true; config.dual_search_interval = 0; rejected = false;
     try { satsolv::Solver solver(config); } catch (const std::invalid_argument&) { rejected = true; }
     assert(rejected);
     config = {}; config.rank_lbd = config.target_phases = config.reason_bump = config.recent_use = true;
@@ -162,5 +207,5 @@ int main() {
         for (int lit : clause) if (second.model[static_cast<std::size_t>((lit < 0 ? -lit : lit) - 1)] == lit) satisfied = true;
         assert(satisfied);
     }
-    std::cout << "PASS: birth/reason score conventions, fixed tiers, recent-use expiration, reason locks, target backtracking/reset, bounded bumps and epoch wrap\n";
+    std::cout << "PASS: search policy invariants including focused VMTF / stable EVSIDS dual search\n";
 }

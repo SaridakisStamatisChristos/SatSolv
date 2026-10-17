@@ -46,6 +46,8 @@ void usage(std::ostream& os) {
           "  --experimental-target-phases guide decisions by promising trails\n"
           "  --experimental-reason-bump bounded reason-side variable activity\n"
           "  --experimental-recent-use one-round conflict-use clause protection\n"
+          "  --experimental-dual-search alternate focused VMTF / stable EVSIDS\n"
+          "  --dual-search-interval <n> conflicts per search mode (default: 1000)\n"
           "  --experimental-short-ssr bounded structure-preserving resolution\n"
           "  --experimental-implication-strengthen bounded binary graph strengthening\n"
           "  --strengthen-budget <n> maximum structural strengthening work\n"
@@ -99,6 +101,13 @@ void write_stats_json(const std::filesystem::path& path,
         << "  \"decisions\": " << s.decisions << ",\n"
         << "  \"propagations\": " << s.propagations << ",\n"
         << "  \"restarts\": " << s.restarts << ",\n"
+        << "  \"search_mode_switches\": " << s.search_mode_switches << ",\n"
+        << "  \"focused_conflicts\": " << s.focused_conflicts << ",\n"
+        << "  \"stable_conflicts\": " << s.stable_conflicts << ",\n"
+        << "  \"focused_decisions\": " << s.focused_decisions << ",\n"
+        << "  \"stable_decisions\": " << s.stable_decisions << ",\n"
+        << "  \"vmtf_bumps\": " << s.vmtf_bumps << ",\n"
+        << "  \"vmtf_search_steps\": " << s.vmtf_search_steps << ",\n"
         << "  \"learnt_clauses\": " << s.learnt_clauses << ",\n"
         << "  \"deleted_learnt_clauses\": " << s.deleted_learnt_clauses << ",\n"
         << "  \"max_trail\": " << s.max_trail << ",\n"
@@ -181,7 +190,7 @@ int main(int argc, char** argv) {
             std::string arg = argv[i];
             if (arg == "--help") { usage(std::cout); return 0; }
             if (arg == "--version") { std::cout << "SatSolv 0.3.0\n"; return 0; }
-            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget" || arg == "--search-warmup" || arg == "--search-warmup-seconds" || arg == "--strengthen-budget" || arg == "--probe-start" || arg == "--probe-budget") {
+            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget" || arg == "--search-warmup" || arg == "--search-warmup-seconds" || arg == "--dual-search-interval" || arg == "--strengthen-budget" || arg == "--probe-start" || arg == "--probe-budget") {
                 if (++i >= argc) throw std::invalid_argument("missing value for " + arg);
                 std::string value = argv[i];
                 if (arg == "--proof") proof = std::filesystem::path(value);
@@ -196,6 +205,7 @@ int main(int argc, char** argv) {
                 else if (arg == "--reason-bump-budget") config.reason_bump_budget = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--search-warmup") config.search_warmup = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--search-warmup-seconds") config.search_warmup_seconds = time_option(value);
+                else if (arg == "--dual-search-interval") config.dual_search_interval = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--time-limit") config.time_limit_seconds = time_option(value);
                 else stats_json = std::filesystem::path(value);
                 continue;
@@ -209,6 +219,7 @@ int main(int argc, char** argv) {
             if (arg == "--experimental-target-phases") { config.target_phases = true; continue; }
             if (arg == "--experimental-reason-bump") { config.reason_bump = true; continue; }
             if (arg == "--experimental-recent-use") { config.recent_use = true; continue; }
+            if (arg == "--experimental-dual-search") { config.dual_search = true; continue; }
             if (arg == "--experimental-short-ssr") { config.short_ssr = true; continue; }
             if (arg == "--experimental-implication-strengthen") { config.implication_strengthen = true; continue; }
             if (arg == "--strengthen-keep-activity") { config.strengthen_keep_activity = true; continue; }
@@ -262,6 +273,9 @@ int main(int argc, char** argv) {
                       << "c decisions " << s.decisions << "\n"
                       << "c propagations " << s.propagations << "\n"
                       << "c restarts " << s.restarts << "\n"
+                      << "c search_mode_switches " << s.search_mode_switches << "\n"
+                      << "c focused_conflicts " << s.focused_conflicts << "\n"
+                      << "c stable_conflicts " << s.stable_conflicts << "\n"
                       << "c learnt_clauses " << s.learnt_clauses << "\n"
                       << "c deleted_learnt_clauses " << s.deleted_learnt_clauses << "\n"
                       << "c max_trail " << s.max_trail << "\n"
