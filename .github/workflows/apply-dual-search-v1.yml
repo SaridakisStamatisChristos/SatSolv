@@ -1,0 +1,90 @@
+name: Apply dual-search v1 implementation
+
+on:
+  push:
+    branches:
+      - exp/satsolv-dual-search-v1
+    paths:
+      - tools/apply_dual_search_v1.py
+      - .github/workflows/apply-dual-search-v1.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: exp/satsolv-dual-search-v1
+
+      - name: Apply exact source transformation
+        run: python3 tools/apply_dual_search_v1.py
+
+      - name: Require intended source delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --exit-code -- include/satsolv/vmtf_queue.hpp >/dev/null || true
+          git status --short
+          test -n "$(git status --short src/solver_v2.cpp src/main.cpp tests/test_search.cpp)"
+
+      - name: Strict release build and native tests
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSATSOLV_WARNINGS_AS_ERRORS=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+
+      - name: Sanitizer build and native tests
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          cmake -S . -B build-san -DCMAKE_BUILD_TYPE=Debug -DSATSOLV_ENABLE_SANITIZERS=ON -DSATSOLV_WARNINGS_AS_ERRORS=ON
+          cmake --build build-san -j2
+          ctest --test-dir build-san --output-on-failure
+
+      - name: Check dual-search telemetry on a searched UNSAT fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/dual.cnf <<'CNF'
+          p cnf 2 4
+          1 2 0
+          1 -2 0
+          -1 2 0
+          -1 -2 0
+          CNF
+          set +e
+          build/satsolv /tmp/dual.cnf --no-congruence --experimental-dual-search --dual-search-interval 1 --stats-json /tmp/dual.json
+          rc=$?
+          set -e
+          test "$rc" -eq 20
+          python3 - <<'PY'
+          import json
+          s=json.load(open('/tmp/dual.json'))
+          assert s['result']=='UNSAT'
+          assert s['focused_conflicts'] + s['stable_conflicts'] == s['conflicts']
+          assert s['focused_decisions'] + s['stable_decisions'] == s['decisions']
+          assert s['vmtf_search_steps'] > 0
+          print(json.dumps({k:s[k] for k in ('conflicts','decisions','search_mode_switches','focused_conflicts','stable_conflicts','vmtf_bumps','vmtf_search_steps')}, indent=2))
+          PY
+
+      - name: Remove one-shot transformation scaffolding
+        run: |
+          git rm tools/apply_dual_search_v1.py tools/dual_search_v1.patch .github/workflows/apply-dual-search-v1.yml
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Aether Synthesis'
+          git config user.email '34583142+SaridakisStamatisChristos@users.noreply.github.com'
+          git add src/solver_v2.cpp src/main.cpp tests/test_search.cpp include/satsolv/solver.hpp include/satsolv/vmtf_queue.hpp
+          git diff --cached --check
+          git commit -m 'Implement experimental focused VMTF and stable EVSIDS dual search'
+          git push origin HEAD:exp/satsolv-dual-search-v1
