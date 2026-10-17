@@ -1,0 +1,148 @@
+name: Dual-search v1 causal qualification
+
+on:
+  pull_request:
+    paths:
+      - benchmarks/competition_manifest.json
+      - src/**
+      - include/**
+      - tests/**
+      - tools/core_search_check.py
+      - tools/paired_campaign.py
+      - tools/dual_search_ab.py
+      - .github/workflows/dual-search.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      MANIFEST_SHA256: 7ef151bdfce7cd0344e27643446f2509823b43432a64292661a6de86ceb26a53
+      KISSAT_COMMIT: 8af8e56f174b778aef3aa45af9f739b2a5f492c2
+      DRAT_TRIM_COMMIT: 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+      TARGET_WARMUP_CONFLICTS: '1000000'
+      DUAL_SEARCH_INTERVAL: '1000'
+      SOLVER_SECONDS: '60'
+      PROOF_SECONDS: '300'
+      MEMORY_GIB: '4'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require unchanged frozen-30 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f benchmarks/competition_manifest.json
+          printf '%s  %s\n' "$MANIFEST_SHA256" benchmarks/competition_manifest.json | sha256sum --check --strict
+
+      - name: Validate qualification tooling
+        run: python3 -m py_compile tools/dual_search_ab.py tools/paired_campaign.py
+
+      - name: Build one release SatSolv executable
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSATSOLV_WARNINGS_AS_ERRORS=ON
+          cmake --build build -j2
+
+      - name: Native unit tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Build pinned independent verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout "$DRAT_TRIM_COMMIT"
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+
+      - name: Independently certify unchanged search-policy baseline
+        run: |
+          python3 tools/core_search_check.py build/satsolv \
+            --cases 50 \
+            --drat-trim /tmp/drat-trim-bin
+
+      - name: Build pinned Kissat 4.0.4 comparator
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/arminbiere/kissat.git /tmp/kissat
+          git -C /tmp/kissat checkout "$KISSAT_COMMIT"
+          cd /tmp/kissat
+          ./configure
+          make -j2
+
+      - name: Fetch and hash-check frozen inputs
+        run: python3 tools/fetch_benchmarks.py --manifest benchmarks/competition_manifest.json --dest benchmarks/cache
+
+      - name: Create same-binary dual-search configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p benchmarks/results/dual-search-v1
+          python3 tools/dual_search_ab.py config \
+            --manifest benchmarks/competition_manifest.json \
+            --binary build/satsolv \
+            --kissat /tmp/kissat/build/kissat \
+            --source-commit "$GITHUB_SHA" \
+            --kissat-commit "$KISSAT_COMMIT" \
+            --warmup "$TARGET_WARMUP_CONFLICTS" \
+            --mode-interval "$DUAL_SEARCH_INTERVAL" \
+            --output benchmarks/results/dual-search-v1/config.json
+
+      - name: Execute certified same-binary comparison
+        run: |
+          python3 tools/paired_campaign.py \
+            --manifest benchmarks/competition_manifest.json \
+            --root benchmarks/cache \
+            --config benchmarks/results/dual-search-v1/config.json \
+            --drat-trim /tmp/drat-trim-bin \
+            --time-limit "$SOLVER_SECONDS" \
+            --verification-time-limit "$PROOF_SECONDS" \
+            --memory-gib "$MEMORY_GIB" \
+            --seed 1 \
+            --order-offset 0 \
+            --minimum-solves 11 \
+            --output benchmarks/results/dual-search-v1/result.json
+
+      - name: Audit causal integrity
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          result=benchmarks/results/dual-search-v1/result.json
+          if test -f "$result"; then
+            python3 tools/dual_search_ab.py audit \
+              --result "$result" \
+              --output benchmarks/results/dual-search-v1/audit.json
+          else
+            echo 'paired result missing; causal audit cannot run' >&2
+            exit 1
+          fi
+
+      - name: Upload raw evidence before adoption gating
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dual-search-v1-evidence
+          path: |
+            benchmarks/results/dual-search-v1/config.json
+            benchmarks/results/dual-search-v1/result.json
+            benchmarks/results/dual-search-v1/audit.json
+          if-no-files-found: warn
+
+      - name: Enforce prespecified dual-search adoption gate
+        if: success()
+        run: |
+          python3 tools/dual_search_ab.py audit \
+            --result benchmarks/results/dual-search-v1/result.json \
+            --output benchmarks/results/dual-search-v1/audit.json \
+            --require-adoption-gate
+
+# A green result means only that dual-search v1 passed this frozen development
+# corpus gate. It is not statistical, holdout, competition-wide, or general
+# SOTA superiority evidence.
