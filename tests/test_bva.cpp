@@ -121,10 +121,10 @@ int main() {
     // Multi-literal rectangles: identical suffixes across two centers.
     // This is a stronger class than the first binary-only prototype.
     const satsolv::Formula long_tails = satsolv::parse_dimacs_text(
-        "p cnf 6 6\\n"
-        "1 3 4 0\\n2 3 4 0\\n"
-        "1 3 5 0\\n2 3 5 0\\n"
-        "1 4 6 0\\n2 4 6 0\\n");
+        "p cnf 6 6\n"
+        "1 3 4 0\n2 3 4 0\n"
+        "1 3 5 0\n2 3 5 0\n"
+        "1 4 6 0\n2 4 6 0\n");
     std::vector<std::vector<int>> long_proof;
     const auto rectangle = satsolv::factor_bounded_bva(
         long_tails, 100000, 1,
