@@ -1,0 +1,112 @@
+name: BVA targeted same-binary diagnostic
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/bva-targeted-screen.yml
+      - src/bva.cpp
+      - src/solver_v2.cpp
+      - src/main.cpp
+      - include/satsolv/bva.hpp
+      - include/satsolv/solver.hpp
+      - tools/bva_check.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  two-family-bva-screen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      FROZEN_MANIFEST: 7ef151bdfce7cd0344e27643446f2509823b43432a64292661a6de86ceb26a53
+      DRAT_TRIM_COMMIT: 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check original fixed manifest and select diagnostic cases
+        run: |
+          printf '%s  %s\n' "$FROZEN_MANIFEST" benchmarks/competition_manifest.json | sha256sum -c -
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          full=json.loads(Path('benchmarks/competition_manifest.json').read_text())
+          names=['or_randxor_k3_n520_m520.cnf','posixpath__joinrealpath_13.cnf']
+          rows=[next(item for item in full['instances'] if item['name']==name) for name in names]
+          Path('bva-screen').mkdir(exist_ok=True)
+          Path('bva-screen/manifest.json').write_text(json.dumps({'count':2,'instances':rows},indent=2)+'\n')
+          PY
+      - name: Compile same native executable
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSATSOLV_WARNINGS_AS_ERRORS=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+      - name: Build pinned independent proof checker
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout "$DRAT_TRIM_COMMIT"
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Fetch hash-verified diagnostic inputs
+        run: python3 tools/fetch_benchmarks.py --manifest bva-screen/manifest.json --dest benchmarks/cache
+      - name: Freeze exact same-binary comparison arms
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib,os
+          def digest(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+          native=str(Path('build/satsolv').resolve())
+          common=['--experimental-target-phases','--search-warmup','1000000']
+          arms=[
+            {'name':'control','kind':'satsolv','binary':native,
+             'source_commit':os.environ['GITHUB_SHA'],'flags':common},
+            {'name':'candidate','kind':'satsolv','binary':native,
+             'source_commit':os.environ['GITHUB_SHA'],
+             'flags':[ *common, '--experimental-bva','--bva-budget','2000000',
+                       '--bva-max-variables','16' ]},
+          ]
+          doc={'manifest_sha256':digest('bva-screen/manifest.json'),
+               'instance_count':2,'purpose':'exploratory two-family BVA attribution',
+               'arms':arms}
+          Path('bva-screen/config.json').write_text(json.dumps(doc,indent=2)+'\n')
+          PY
+      - name: Run model and DRAT certified paired comparison
+        run: |
+          python3 tools/paired_campaign.py \
+            --manifest bva-screen/manifest.json \
+            --config bva-screen/config.json \
+            --root benchmarks/cache --drat-trim /tmp/drat-trim-bin \
+            --time-limit 60 --verification-time-limit 300 --memory-gib 4 \
+            --seed 1 --minimum-solves 0 --output bva-screen/result.json
+      - name: Assert causal identity and evidence completeness
+        if: always()
+        run: |
+          if test ! -f bva-screen/result.json; then exit 1; fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('bva-screen/result.json').read_text())
+          arms=d['pins']['config']['arms']
+          assert len(arms)==2 and len(d['rows'])==2
+          assert arms[0]['binary_sha256']==arms[1]['binary_sha256']
+          assert arms[0]['source_commit']==arms[1]['source_commit']
+          assert d['certification']['passed']
+          for row in d['rows']:
+              for name in ('control','candidate'):
+                  obs=row['solvers'][name]
+                  if not obs['timed_out']:
+                      assert isinstance(obs.get('stats'),dict)
+                      if name=='control': assert obs['stats']['bva_variables_added']==0
+              # A negative runtime result is valuable evidence, never a CI failure.
+          print('PASS: same binary; exact flags; independent certification')
+          PY
+      - name: Upload two-family performance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bva-biclique-v1-two-family-evidence
+          path: bva-screen/*.json
+          if-no-files-found: warn
+
+# This selected diagnostic slice is not a held-out adoption test.
