@@ -51,6 +51,9 @@ void usage(std::ostream& os) {
           "  --strengthen-budget <n> maximum structural strengthening work\n"
           "  --strengthen-keep-activity preserve pre-strengthening occurrence priorities\n"
           "  --experimental-root-probe learn bounded watched-propagation implications\n"
+          "  --experimental-bva  bounded binary-clause variable addition (RAT proof)\n"
+          "  --bva-budget <n>    candidate/index work limit (default: 2000000)\n"
+          "  --bva-max-variables <n> max fresh variables per solve (default: 16)\n"
           "  --probe-start <n> first probing conflict budget (default: 1000000)\n"
           "  --probe-budget <n> maximum charged probe work per round\n"
           "  --target-window <n>  initial target reset interval (default: 10000)\n"
@@ -103,6 +106,10 @@ void write_stats_json(const std::filesystem::path& path,
         << "  \"deleted_learnt_clauses\": " << s.deleted_learnt_clauses << ",\n"
         << "  \"max_trail\": " << s.max_trail << ",\n"
         << "  \"proof_bytes\": " << s.proof_bytes << ",\n"
+        << "  \"bva_work\": " << s.bva_work << ",\n"
+        << "  \"bva_variables_added\": " << s.bva_variables_added << ",\n"
+        << "  \"bva_clauses_removed\": " << s.bva_clauses_removed << ",\n"
+        << "  \"bva_literals_saved\": " << s.bva_literals_saved << ",\n"
         << "  \"congruence_equivalences\": " << s.congruence_equivalences << ",\n"
         << "  \"congruence_and_gates\": " << s.congruence_and_gates << ",\n"
         << "  \"congruence_work\": " << s.congruence_work << ",\n"
@@ -181,7 +188,7 @@ int main(int argc, char** argv) {
             std::string arg = argv[i];
             if (arg == "--help") { usage(std::cout); return 0; }
             if (arg == "--version") { std::cout << "SatSolv 0.3.0\n"; return 0; }
-            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget" || arg == "--search-warmup" || arg == "--search-warmup-seconds" || arg == "--strengthen-budget" || arg == "--probe-start" || arg == "--probe-budget") {
+            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget" || arg == "--search-warmup" || arg == "--search-warmup-seconds" || arg == "--strengthen-budget" || arg == "--bva-budget" || arg == "--bva-max-variables" || arg == "--probe-start" || arg == "--probe-budget") {
                 if (++i >= argc) throw std::invalid_argument("missing value for " + arg);
                 std::string value = argv[i];
                 if (arg == "--proof") proof = std::filesystem::path(value);
@@ -190,6 +197,8 @@ int main(int argc, char** argv) {
                 else if (arg == "--vivify-budget") config.vivify_budget = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--eliminate-budget") config.eliminate_budget = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--strengthen-budget") config.strengthen_budget = integer_option<std::uint64_t>(value, arg);
+                else if (arg == "--bva-budget") config.bva_budget = integer_option<std::uint64_t>(value, arg);
+                else if (arg == "--bva-max-variables") config.bva_max_variables = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--probe-start") config.probe_start = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--probe-budget") config.probe_budget = integer_option<std::uint64_t>(value, arg);
                 else if (arg == "--target-window") config.target_window = integer_option<std::uint64_t>(value, arg);
@@ -213,6 +222,7 @@ int main(int argc, char** argv) {
             if (arg == "--experimental-implication-strengthen") { config.implication_strengthen = true; continue; }
             if (arg == "--strengthen-keep-activity") { config.strengthen_keep_activity = true; continue; }
             if (arg == "--experimental-root-probe") { config.root_probe = true; continue; }
+            if (arg == "--experimental-bva") { config.experimental_bva = true; continue; }
             if (arg == "--experimental-simplify") { config.simplify = true; continue; }
             if (arg == "--experimental-binary-minimize") { config.binary_minimize = true; continue; }
             if (arg == "--experimental-clause-decay") { config.clause_decay = 0.999; continue; }

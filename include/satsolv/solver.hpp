@@ -44,6 +44,9 @@ struct SolverConfig {
     bool implication_strengthen = false;
     bool strengthen_keep_activity = false;
     bool root_probe = false;
+    bool experimental_bva = false;
+    std::uint64_t bva_budget = 2000000;
+    std::uint64_t bva_max_variables = 16;
     std::uint64_t probe_start = 1000000;
     std::uint64_t probe_budget = 1000000;
     std::uint64_t strengthen_budget = 8000000;
@@ -107,6 +110,10 @@ struct SolverStats {
     std::uint64_t probe_work = 0;
     std::uint64_t probe_attempts = 0;
     std::uint64_t probe_rounds = 0;
+    std::uint64_t bva_work = 0;
+    std::uint64_t bva_variables_added = 0;
+    std::uint64_t bva_clauses_removed = 0;
+    std::uint64_t bva_literals_saved = 0;
     std::uint64_t probe_units = 0;
     std::uint64_t probe_binaries = 0;
     std::array<std::uint64_t, 16> birth_lbd_histogram{};
