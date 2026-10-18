@@ -188,7 +188,7 @@ int main(int argc, char** argv) {
             std::string arg = argv[i];
             if (arg == "--help") { usage(std::cout); return 0; }
             if (arg == "--version") { std::cout << "SatSolv 0.3.0\n"; return 0; }
-            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget" || arg == "--search-warmup" || arg == "--search-warmup-seconds" || arg == "--strengthen-budget" || arg == "--probe-start" || arg == "--probe-budget") {
+            if (arg == "--proof" || arg == "--seed" || arg == "--time-limit" || arg == "--stats-json" || arg == "--reduce-interval" || arg == "--vivify-budget" || arg == "--eliminate-budget" || arg == "--target-window" || arg == "--reason-bump-budget" || arg == "--search-warmup" || arg == "--search-warmup-seconds" || arg == "--strengthen-budget" || arg == "--bva-budget" || arg == "--bva-max-variables" || arg == "--probe-start" || arg == "--probe-budget") {
                 if (++i >= argc) throw std::invalid_argument("missing value for " + arg);
                 std::string value = argv[i];
                 if (arg == "--proof") proof = std::filesystem::path(value);
