@@ -117,6 +117,41 @@ int main() {
     assert(disabled.stats.bva_variables_added == 0);
     assert(disabled.result == satsolv::SolveResult::Sat);
 
-    std::cout << "PASS: binary BVA existential equivalence, RAT order, "
+
+    // Multi-literal rectangles: identical suffixes across two centers.
+    // This is a stronger class than the first binary-only prototype.
+    const satsolv::Formula long_tails = satsolv::parse_dimacs_text(
+        "p cnf 6 6\\n"
+        "1 3 4 0\\n2 3 4 0\\n"
+        "1 3 5 0\\n2 3 5 0\\n"
+        "1 4 6 0\\n2 4 6 0\\n");
+    std::vector<std::vector<int>> long_proof;
+    const auto rectangle = satsolv::factor_bounded_bva(
+        long_tails, 100000, 1,
+        [&](const std::vector<int>& clause) { long_proof.push_back(clause); },
+        [] { return false; });
+    assert(rectangle.applied && rectangle.variables_added == 1);
+    assert(rectangle.formula.variables == 7);
+    assert(rectangle.clauses_removed == 6 && rectangle.literals_saved == 5);
+    assert(long_proof.size() == 5);
+    assert(long_proof[0][0] == 7 && long_proof[1][0] == 7);
+    for (std::size_t i = 2; i < long_proof.size(); ++i) {
+        assert(long_proof[i][0] == -7 && long_proof[i].size() == 3);
+    }
+    for (int mask = 0; mask < (1 << 6); ++mask) {
+        const auto values = valuation(6, mask);
+        bool witness = false;
+        for (int xv : {-7, 7}) {
+            auto extended = values;
+            extended.push_back(xv);
+            witness = witness || satisfies(rectangle.formula, extended);
+        }
+        assert(satisfies(long_tails, values) == witness);
+    }
+    const auto long_solve = satsolv::Solver(candidate).solve(long_tails);
+    assert(long_solve.result == satsolv::SolveResult::Sat);
+    assert(long_solve.model.size() == 6 && satisfies(long_tails, long_solve.model));
+
+    std::cout << "PASS: generalized BVA existential equivalence, RAT order, "
                  "budgets, interruption, model projection and UNSAT\n";
 }
