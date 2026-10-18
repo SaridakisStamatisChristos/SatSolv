@@ -942,7 +942,7 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     BvaResult factored;
     std::vector<std::vector<int>> bva_additions;
     if (config_.experimental_bva) {
-        factored = factor_binary_bva(formula, config_.bva_budget, config_.bva_max_variables,
+        factored = factor_bounded_bva(formula, config_.bva_budget, config_.bva_max_variables,
             [&bva_additions](const std::vector<int>& clause) { bva_additions.push_back(clause); },
             [this]() { return timed_out(); });
     }
