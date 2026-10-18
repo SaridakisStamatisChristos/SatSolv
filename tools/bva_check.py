@@ -34,9 +34,15 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         temp = Path(tmp)
         for index in range(args.cases):
-            n = rng.randint(5, 7)
-            neighbors = sorted(rng.sample(list(range(3, n + 1)), 3))
-            clauses = [(a, b) for b in neighbors for a in (1, 2)]
+            n = rng.randint(6, 8)
+            if index % 2:
+                # Paired clauses sharing two-literal tails exercise RAT
+                # extension proofs that the binary-only gate did not cover.
+                tails = rng.sample(
+                    list(itertools.combinations(range(3, n + 1), 2)), 3)
+            else:
+                tails = [(b,) for b in rng.sample(list(range(3, n + 1)), 3)]
+            clauses = [(a, *tail) for tail in tails for a in (1, 2)]
             for _ in range(rng.randint(0, 13)):
                 v = rng.randint(1, n)
                 clauses.append((v if rng.randrange(2) else -v,))
