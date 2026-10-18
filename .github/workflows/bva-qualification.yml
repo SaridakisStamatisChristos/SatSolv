@@ -1,0 +1,65 @@
+name: Experimental BVA proof and model qualification
+
+on:
+  pull_request:
+    paths:
+      - src/bva.cpp
+      - src/solver_v2.cpp
+      - src/main.cpp
+      - include/satsolv/bva.hpp
+      - include/satsolv/solver.hpp
+      - tests/test_bva.cpp
+      - tools/bva_check.py
+      - .github/workflows/bva-qualification.yml
+      - CMakeLists.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bva-certification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release with warnings as errors
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSATSOLV_WARNINGS_AS_ERRORS=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+      - name: Compile and verify pinned independent DRAT checker
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/marijnheule/drat-trim.git /tmp/drat-trim
+          git -C /tmp/drat-trim checkout 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+          cc -O2 -DNDEBUG /tmp/drat-trim/drat-trim.c -o /tmp/drat-trim-bin
+      - name: Certify SAT models and RAT proof traces on 80 original CNFs
+        run: |
+          python3 tools/bva_check.py \
+            --satsolv build/satsolv \
+            --drat-trim /tmp/drat-trim-bin \
+            --cases 80 \
+            --output benchmarks/results/bva-v1/certification.json
+      - name: Record bounded diagnostic screen without adoption gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('benchmarks/results/bva-v1/certification.json')
+          d=json.loads(p.read_text())
+          assert d['status']=='PASS' and d['certified_observations']==240
+          print('BVA correctness passed; comparative superiority remains UNVERIFIED')
+          PY
+      - name: Always preserve evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bva-v1-certification-evidence
+          path: benchmarks/results/bva-v1/*.json
+          if-no-files-found: warn
+
+# Opt-in prototype. No feature-default change and no SOTA claim.
