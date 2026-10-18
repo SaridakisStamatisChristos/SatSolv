@@ -10,6 +10,7 @@ add_library(satsolv_core
     src/simplifier.cpp
     src/eliminate.cpp
     src/congruence.cpp
+    src/bva.cpp
     src/strengthen.cpp
 )
 target_include_directories(satsolv_core PUBLIC include)
@@ -61,6 +62,18 @@ if(BUILD_TESTING)
     endif()
   endif()
   add_test(NAME engine COMMAND satsolv_engine_tests)
+  add_executable(satsolv_bva_tests tests/test_bva.cpp)
+  target_link_libraries(satsolv_bva_tests PRIVATE satsolv_core)
+  if(MSVC)
+    target_compile_options(satsolv_bva_tests PRIVATE /UNDEBUG)
+  else()
+    target_compile_options(satsolv_bva_tests PRIVATE -UNDEBUG)
+    if(SATSOLV_ENABLE_SANITIZERS)
+      target_compile_options(satsolv_bva_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+      target_link_options(satsolv_bva_tests PRIVATE -fsanitize=address,undefined)
+    endif()
+  endif()
+  add_test(NAME bva COMMAND satsolv_bva_tests)
   add_executable(satsolv_congruence_tests tests/test_congruence.cpp)
   target_link_libraries(satsolv_congruence_tests PRIVATE satsolv_core)
   if(MSVC)
