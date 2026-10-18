@@ -148,7 +148,9 @@ int main() {
         }
         assert(satisfies(long_tails, values) == witness);
     }
+    candidate.bva_budget = 1000000;
     const auto long_solve = satsolv::Solver(candidate).solve(long_tails);
+    assert(long_solve.stats.bva_variables_added == 1);
     assert(long_solve.result == satsolv::SolveResult::Sat);
     assert(long_solve.model.size() == 6 && satisfies(long_tails, long_solve.model));
 
