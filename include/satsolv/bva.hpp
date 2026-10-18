@@ -6,9 +6,10 @@
 
 namespace satsolv {
 
-// A bounded, experimental binary-clause BVA pass. A complete 2 x k biclique
-// (a | b_i) & (c | b_i) is replaced by
-// (a | x) & (c | x) & (not x | b_i), k >= 3, with fresh x.
+// A bounded, experimental BVA pass. A complete 2 x k clause rectangle
+// (a | T_i) & (c | T_i) is replaced by
+// (a | x) & (c | x) & (not x | T_i), k >= 3, with fresh x.
+// T_i may be one literal (binary case) or a multi-literal disjunction.
 // The existential projection onto original variables is equivalent.
 // emit() receives DRAT RAT additions in pivot-first order, BEFORE use.
 // The caller must project SAT models back to the original variable count.
@@ -21,7 +22,7 @@ struct BvaResult {
     std::uint64_t literals_saved = 0;
 };
 
-BvaResult factor_binary_bva(
+BvaResult factor_bounded_bva(
     const Formula& input,
     std::uint64_t budget,
     std::uint64_t max_variables,
