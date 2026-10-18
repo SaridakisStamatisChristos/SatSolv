@@ -35,7 +35,7 @@ satsolv::Formula biclique() {
 int main() {
     const auto original = biclique();
     std::vector<std::vector<int>> proof_additions;
-    const auto transformed = satsolv::factor_binary_bva(
+    const auto transformed = satsolv::factor_bounded_bva(
         original, 10000, 1, [&](const std::vector<int>& c) { proof_additions.push_back(c); },
         [] { return false; });
     assert(transformed.applied);
@@ -65,7 +65,7 @@ int main() {
     // A partially exhausted budget or interruption must not emit an addition.
     for (std::uint64_t budget : {0ULL, 1ULL, 5ULL}) {
         std::size_t emitted = 0;
-        const auto skipped = satsolv::factor_binary_bva(
+        const auto skipped = satsolv::factor_bounded_bva(
             original, budget, 1,
             [&](const std::vector<int>&) { ++emitted; }, [] { return false; });
         assert(!skipped.applied && emitted == 0);
@@ -73,7 +73,7 @@ int main() {
     }
     {
         std::size_t emitted = 0;
-        const auto skipped = satsolv::factor_binary_bva(
+        const auto skipped = satsolv::factor_bounded_bva(
             original, 10000, 1,
             [&](const std::vector<int>&) { ++emitted; }, [] { return true; });
         assert(!skipped.applied && emitted == 0);
@@ -83,7 +83,7 @@ int main() {
     }) {
         bool rejected = false;
         try {
-            (void) satsolv::factor_binary_bva(bad, 10000, 1,
+            (void) satsolv::factor_bounded_bva(bad, 10000, 1,
                 [](const std::vector<int>&) {}, [] { return false; });
         } catch (const std::invalid_argument&) { rejected = true; }
         assert(rejected);
