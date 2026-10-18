@@ -1,4 +1,5 @@
 #include "satsolv/solver.hpp"
+#include "satsolv/bva.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -935,9 +936,24 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
         if (magnitude == 0 || magnitude > formula.variables)
             throw std::invalid_argument("formula literal outside variable range");
     }
+    // Factor before the main CDCL engine is reset, so all extension variables
+    // are represented in watches, heaps, and assignment vectors from startup.
+    // Buffer RAT additions until the proof stream has been initialized.
+    BvaResult factored;
+    std::vector<std::vector<int>> bva_additions;
+    if (config_.experimental_bva) {
+        factored = factor_binary_bva(formula, config_.bva_budget, config_.bva_max_variables,
+            [&bva_additions](const std::vector<int>& clause) { bva_additions.push_back(clause); },
+            [this]() { return timed_out(); });
+    }
+    const Formula& bva_input = factored.applied ? factored.formula : formula;
     if (proof_.is_open()) proof_.close();
     proof_.clear(); proof_enabled_ = false;
-    reset(formula.variables);
+    reset(bva_input.variables);
+    stats_.bva_work = factored.work;
+    stats_.bva_variables_added = factored.variables_added;
+    stats_.bva_clauses_removed = factored.clauses_removed;
+    stats_.bva_literals_saved = factored.literals_saved;
 
     if (proof_path) {
         proof_.open(*proof_path, std::ios::out | std::ios::trunc | std::ios::binary);
@@ -946,14 +962,15 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     } else {
         proof_enabled_ = false;
     }
+    for (const auto& addition : bva_additions) log_clause(addition);
     CongruenceResult congruent;
     SimplifyResult simplified;
     SimplifyResult eliminated;
     StrengthenResult strengthened;
     std::vector<double> initial_activity;
-    const Formula* input = &formula;
+    const Formula* input = &bva_input;
     if (config_.congruence) {
-        congruent = simplify_congruence(formula, config_.congruence_budget,
+        congruent = simplify_congruence(*input, config_.congruence_budget,
             [this](const std::vector<int>& clause) { log_clause(clause); },
             [this]() { return timed_out(); });
         stats_.congruence_equivalences = congruent.equivalences;
@@ -1159,6 +1176,12 @@ SolveOutput Solver::solve(const Formula& formula, const std::optional<std::files
     if (output.result == SolveResult::Sat && simplified.applied) extend_model(output.model, simplified.eliminations);
     if (output.result == SolveResult::Sat && eliminated.applied) extend_model(output.model, eliminated.eliminations);
     if (output.result == SolveResult::Sat && congruent.applied) restore_equivalent_model(output.model, congruent.representatives);
+    if (output.result == SolveResult::Sat && factored.applied) {
+        // Extension variables are existential witnesses, not DIMACS inputs.
+        // The full internal assignment satisfies the factored formula; its
+        // original-variable projection must satisfy the caller's formula.
+        output.model.resize(static_cast<std::size_t>(formula.variables));
+    }
     if (proof_enabled_) {
         flush_proof(); proof_.flush();
         if (!proof_) throw std::runtime_error("proof output flush failed");
